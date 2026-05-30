@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# 企業訂餐系統 — 員工端前端
 
-## Getting Started
+雲端原生課程期末專案的前端，使用 Next.js 開發。
 
-First, run the development server:
+## 技術棧
+
+- Next.js 16（App Router）
+- React 19
+- Tailwind CSS 4
+- Docker + Kubernetes
+
+## 本機開發
 
 ```bash
+# 安裝套件
+npm install
+
+# 複製環境變數範本，並填入後端 Kong API Gateway 位址
+cp .env.example .env.local
+
+# 啟動開發伺服器
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+打開 http://localhost:3000
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+## 測試帳號
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- admin1@test.com / admin123（管理員）
+- newuser@test.com（員工，密碼請洽組員）
 
-## Learn More
+## 部署
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+# 建置 Docker 映像
+docker build -t employee-frontend:latest .
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# 執行（記得帶環境變數）
+docker run -p 3000:3000 --env-file .env.local employee-frontend:latest
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 專案結構
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `app/` Next.js App Router 頁面
+- `app/api/` 伺服器端 API（負責跟後端微服務溝通）
+- `components/` 共用元件
+- `lib/` 工具函式（API 包裝、廠區、日期等）
+- `k8s/` Kubernetes 部署檔
