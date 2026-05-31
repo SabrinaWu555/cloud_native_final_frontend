@@ -67,7 +67,7 @@ export default function Navbar() {
             <span>
               <span className="block text-base font-bold leading-tight">企業訂餐平台</span>
               <span className="block text-xs font-medium text-[var(--teal-200)]">
-                {portal === "vendor" ? "商家端" : portal === "committee" ? "福委會端" : "員工端"}
+                {portal === "vendor" ? "商家端" : portal === "committee" ? "福委會端" : "員工 · Employee"}
               </span>
             </span>
           </Link>

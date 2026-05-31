@@ -6,8 +6,10 @@ import { useEffect, useState } from "react";
 const NAV_ITEMS = [
   { href: "/committee", label: "總覽" },
   { href: "/committee/accounts", label: "帳號管理" },
+  { href: "/committee/vendors", label: "商家管理" },
   { href: "/committee/registrations", label: "入駐審核" },
   { href: "/committee/appeals", label: "申訴處理" },
+  { href: "/committee/billing", label: "帳單管理" },
 ];
 
 export default function CommitteeNavbar() {

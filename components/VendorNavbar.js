@@ -29,16 +29,16 @@ export default function VendorNavbar() {
   const avatarChar = displayName.charAt(0).toUpperCase();
 
   return (
-    <header className="sticky top-0 z-20 border-b border-[var(--teal-600)]/30 bg-[var(--teal-600)] text-white shadow-sm">
+    <header className="sticky top-0 z-20 border-b border-[var(--vendor-gray-700)]/30 bg-[var(--vendor-gray-900)] text-white shadow-sm">
       <div className="flex min-h-16 w-full flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
         <div className="flex items-center justify-between gap-4">
           <Link href="/vendor" className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-md bg-white text-xs font-black tracking-tight text-[var(--teal-600)]">
+            <span className="flex h-10 w-10 items-center justify-center rounded-md bg-white text-xs font-black tracking-tight text-[var(--vendor-gray-700)]">
               TSMC
             </span>
             <span>
               <span className="block text-base font-bold leading-tight">企業訂餐平台</span>
-              <span className="block text-xs font-medium text-[var(--teal-50)]">商家 · Vendor</span>
+              <span className="block text-xs font-medium text-[var(--vendor-gray-100)]">商家 · Vendor</span>
             </span>
           </Link>
         </div>
@@ -52,7 +52,9 @@ export default function VendorNavbar() {
                   key={item.href}
                   href={item.href}
                   className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
-                    active ? "bg-white/20 text-white" : "text-white/80 hover:bg-white/10 hover:text-white"
+                    active
+                      ? "bg-[var(--vendor-gray-400)] text-white"
+                      : "text-white/80 hover:bg-white/10 hover:text-white"
                   }`}
                 >
                   {item.label}
@@ -64,9 +66,9 @@ export default function VendorNavbar() {
           <div className="flex items-center gap-2 border-l border-white/20 pl-3">
             <div className="hidden text-right sm:block">
               <p className="text-sm font-bold leading-tight">{displayName}</p>
-              <p className="text-xs text-[var(--teal-50)]">vendor</p>
+              <p className="text-xs text-[var(--vendor-gray-100)]">vendor</p>
             </div>
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white font-black text-[var(--teal-600)]">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--vendor-gray-400)] font-black text-white">
               {avatarChar}
             </div>
             <button
