@@ -12,13 +12,43 @@ const STATUS_META = {
 };
 
 async function getOrders() {
-  if (USE_LOCAL_MOCKS || !SERVICES.order) return MOCK_ORDERS;
-  const token = (await cookies()).get(COOKIE_NAME)?.value;
+  if (USE_LOCAL_MOCKS) return MOCK_ORDERS;
+
+  // 打自己的 /api/orders（會帶 cookie 自動轉發到後端）
+  // 這是 server component，所以要用絕對網址
+  const cookieStore = await cookies();
+  const token = cookieStore.get(COOKIE_NAME)?.value;
+
+  if (!SERVICES.order || !token) return MOCK_ORDERS;
+
   try {
-    const res = await apiFetch(serviceUrl(SERVICES.order, ENDPOINTS.orders), { token });
+    // 直接打後端，跟 /api/orders/route.js 同樣邏輯但不繞一圈
+    const res = await apiFetch(serviceUrl(SERVICES.order, ENDPOINTS.ordersMe), { token });
     if (!res.ok) return MOCK_ORDERS;
     const data = await jsonOrEmpty(res);
-    return Array.isArray(data) ? data : data.orders || MOCK_ORDERS;
+
+    // 後端格式: { orders: [...], count: N }
+    const list = Array.isArray(data) ? data : data.orders || [];
+
+    // 把後端的 snake_case 翻譯成前端期待的格式
+    return list.map((o) => ({
+      id: `ORD-${o.id}`,
+      raw_id: o.id,
+      vendor_id: o.vendor_id,
+      vendor_name: o.vendor_name || "—",
+      status: o.status,
+      order_date: o.created_at?.slice(0, 10),
+      target_date: o.pickup_date,
+      pickup_time: "12:20",
+      items: [{
+        menu_id: o.menu_id,
+        name: o.menu_name,
+        price: Number(o.price),
+        quantity: Number(o.quantity),
+      }],
+      total_amount: Number(o.price) * Number(o.quantity),
+      cancel_reason: o.cancel_reason || "",
+    }));
   } catch {
     return MOCK_ORDERS;
   }

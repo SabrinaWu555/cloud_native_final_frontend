@@ -7,8 +7,13 @@ import { getMockAppeal } from "@/lib/mockData";
 export const dynamic = "force-dynamic";
 
 const REASON_LABELS = { wrong_item: "餐點內容不符", late_delivery: "送達延遲", payment_issue: "薪資扣款問題", cancel_issue: "取消訂單問題", other: "其他" };
-const STATUS_STEP = { submitted: 1, reviewing: 2, notified: 3, resolved: 4, rejected: 2 };
-const STEPS = ["員工送出申訴", "福委會委員審核", "通知商家或薪資系統", "員工收到處理結果"];
+// 兩階段：送出 → 結案（含駁回）
+const STATUS_STEP = {
+  submitted: 1,  // pending → 停在第 1 格
+  resolved: 2,   // approved → 走到第 2 格
+  rejected: 2,   // rejected → 也是第 2 格（但用紅色標示）
+};
+const STEPS = ["已送出申訴", "已結案"];
 
 function statusLabel(s) {
   return { submitted: "已送出", reviewing: "審核中", notified: "通知處理中", resolved: "已結案", rejected: "未通過" }[s] || s || "未知";
@@ -16,12 +21,51 @@ function statusLabel(s) {
 
 async function getAppeal(id) {
   if (USE_LOCAL_MOCKS || !SERVICES.appeal) return getMockAppeal(id);
-  const token = (await cookies()).get(COOKIE_NAME)?.value;
+
+  const cookieStore = await cookies();
+  const token = cookieStore.get(COOKIE_NAME)?.value;
+  const userId = cookieStore.get("userId")?.value;
+  const role = cookieStore.get("role")?.value;
+
+  // 把前端的 "APL-1" 拆出後端的 "1"
+  const rawId = String(id).replace(/^APL-/, "");
+
+  // admin 打 /appeals（全部）；employee 打 /appeals/user/:userId（自己的）
+  const path = role === "admin"
+    ? ENDPOINTS.appeals
+    : `${ENDPOINTS.appeals}/user/${encodeURIComponent(userId)}`;
+
   try {
-    const res = await apiFetch(serviceUrl(SERVICES.appeal, ENDPOINTS.appeals), { token });
+    const res = await apiFetch(serviceUrl(SERVICES.appeal, path), { token });
+    if (!res.ok) return getMockAppeal(id);
+
     const data = await jsonOrEmpty(res);
     const list = Array.isArray(data) ? data : data.appeals || [];
-    return list.find((a) => String(a.id) === String(id)) || getMockAppeal(id);
+    const found = list.find((a) => String(a.id) === rawId);
+    if (!found) return null;
+
+    // 翻譯後端格式（reason 是「[類型代碼] 描述」混合，或純文字）
+    let reasonCode = "other";
+    let message = found.reason || "";
+    const m = /^\[([^\]]+)\]\s*(.*)$/s.exec(message);
+    if (m) { reasonCode = m[1]; message = m[2]; }
+
+    let status = found.status;
+    if (status === "pending") status = "submitted";
+    else if (status === "approved") status = "resolved";
+
+    return {
+      id: `APL-${found.id}`,
+      raw_id: found.id,
+      order_id: found.order_id,
+      employee_id: found.employee_id,
+      reason: reasonCode,
+      message,
+      status,
+      refund_amount: found.refund_amount,
+      admin_notes: found.admin_notes,
+      created_at: found.created_at,
+    };
   } catch {
     return getMockAppeal(id);
   }
@@ -57,19 +101,43 @@ export default async function AppealDetailPage({ params }) {
         <p className="mt-1 text-sm text-slate-500">建立時間：{formatDate(appeal.created_at)}</p>
       </section>
 
-      {/* 進度（橫向流程表） */}
+      {/* 進度（兩階段：送出 → 結案） */}
       <section className="rounded-lg bg-[var(--navy-900)] p-6 text-white">
         <p className="text-sm font-bold text-[var(--teal-200)]">處理進度</p>
-        <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-2">
+        <div className="mt-5 flex flex-col gap-6 sm:flex-row sm:items-center sm:gap-4">
           {STEPS.map((label, idx) => {
             const stepNo = idx + 1;
             const done = stepNo <= currentStep;
+            const isLast = idx === STEPS.length - 1;
+            const isRejected = appeal.status === "rejected" && isLast && done;
+
+            // 第二格（結案）的文字依結果調整
+            const displayLabel = isLast && done
+              ? (appeal.status === "rejected" ? "已駁回" : "已核准")
+              : label;
+
             return (
-              <div key={label} className="flex flex-1 items-center gap-3 sm:flex-col sm:items-center sm:text-center">
-                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-black ${done ? "bg-[var(--teal-200)] text-[var(--navy-900)]" : "bg-white/10 text-white/60"}`}>
-                  {stepNo}
+              <div key={label} className="flex flex-1 items-center gap-3">
+                <span
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-black ${
+                    isRejected
+                      ? "bg-[var(--error-bg)] text-[var(--error-fg)]"
+                      : done
+                        ? "bg-[var(--teal-200)] text-[var(--navy-900)]"
+                        : "bg-white/10 text-white/60"
+                  }`}
+                >
+                  {isRejected ? "✕" : done ? "✓" : stepNo}
                 </span>
-                <span className={`text-sm ${done ? "font-bold text-white" : "text-white/60"}`}>{label}</span>
+                <div className="flex-1">
+                  <p className={`text-sm ${done ? "font-bold text-white" : "text-white/60"}`}>{displayLabel}</p>
+                  {isLast && done && appeal.refund_amount > 0 && (
+                    <p className="mt-0.5 text-xs text-[var(--teal-200)]">退款金額：${appeal.refund_amount}</p>
+                  )}
+                </div>
+                {!isLast && (
+                  <span className={`hidden sm:block h-0.5 flex-1 ${done ? "bg-[var(--teal-200)]" : "bg-white/10"}`}></span>
+                )}
               </div>
             );
           })}

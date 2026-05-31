@@ -77,7 +77,12 @@ export default async function OrderDetailPage({ params }) {
         </div>
 
         {/* 右：只剩取消 */}
-        <OrderCancelPanel orderId={order.id} status={order.status} initialReason={order.cancel_reason || ""} />
+        <OrderCancelPanel
+          orderId={order.id}
+          status={order.status}
+          targetDate={order.target_date}     // ← 新增這行
+          initialReason={order.cancel_reason || ""}
+        />
       </section>
     </div>
   );

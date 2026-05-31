@@ -1,15 +1,19 @@
-// components/OrderCancelPanel.js — 取消訂單（client）
+// components/OrderCancelPanel.js — 取消訂單（含截止時間檢查）
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { canCancelOrder, cancelDeadlineLabel } from "@/lib/orderCutoff";
 
-export default function OrderCancelPanel({ orderId, status, initialReason = "" }) {
+export default function OrderCancelPanel({ orderId, status, targetDate, initialReason = "" }) {
   const router = useRouter();
   const [reason, setReason] = useState(initialReason);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const locked = ["cancelled", "completed"].includes(status);
+
+  const statusLocked = ["cancelled", "completed"].includes(status);
+  const timeExpired = !canCancelOrder(targetDate);
+  const locked = statusLocked || timeExpired;
 
   async function cancelOrder() {
     if (!window.confirm("確定要取消這筆訂單嗎？")) return;
@@ -33,13 +37,27 @@ export default function OrderCancelPanel({ orderId, status, initialReason = "" }
     }
   }
 
-  if (locked) {
+  // 已經取消/完成的訂單
+  if (statusLocked) {
     return (
       <div className="surface-panel h-fit rounded-lg p-5">
         <p className="text-sm font-bold text-slate-500">取消訂單</p>
         <p className="mt-3 rounded-md bg-[var(--surface-muted)] p-4 text-sm text-slate-500">
-          此訂單狀態為「{status === "completed" ? "已完成" : "已取消"}」，無法取消。
+          此訂單狀態為「{status === "completed" ? "已完成" : "已取消"}」，無法再取消。
         </p>
+      </div>
+    );
+  }
+
+  // 過了截止時間
+  if (timeExpired) {
+    return (
+      <div className="surface-panel h-fit rounded-lg p-5">
+        <p className="text-sm font-bold text-slate-500">取消訂單</p>
+        <div className="mt-3 rounded-md bg-[var(--warning-bg)] p-4 text-sm text-[var(--warning-fg)]">
+          <p className="font-bold">已超過取消時限</p>
+          <p className="mt-1">取餐日期前一天 17:00 之前才能取消。本筆訂單已超過截止時間。</p>
+        </div>
       </div>
     );
   }
@@ -48,6 +66,7 @@ export default function OrderCancelPanel({ orderId, status, initialReason = "" }
     <div className="surface-panel h-fit rounded-lg p-5">
       <p className="text-sm font-bold text-slate-500">取消訂單</p>
       <h2 className="mt-1 text-2xl font-black text-[var(--navy-900)]">填寫取消原因</h2>
+      <p className="mt-1 text-xs text-[var(--teal-600)]">{cancelDeadlineLabel(targetDate)}</p>
 
       {error && <div className="mt-4 rounded-md bg-[var(--error-bg)] px-3 py-2 text-sm font-medium text-[var(--error-fg)]">{error}</div>}
       {message && <div className="mt-4 rounded-md bg-[var(--success-bg)] px-3 py-2 text-sm font-medium text-[var(--success-fg)]">{message}</div>}

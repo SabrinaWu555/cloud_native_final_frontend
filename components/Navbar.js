@@ -27,13 +27,26 @@ export default function Navbar() {
   const portal = currentPortal(pathname);
   const navItems = navSets[portal];
   const [user, setUser] = useState(null);
+  const [unread, setUnread] = useState(0);
 
   useEffect(() => {
-    // 從 /api/auth/me 拿目前登入者資訊（你下面要新建這個 endpoint）
+    // 撈使用者資料
     fetch("/api/auth/me")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => data && setUser(data))
       .catch(() => {});
+
+    // 撈未讀通知數
+    const fetchUnread = () => {
+      fetch("/api/notifications/unread")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => data && setUnread(data.unread))
+        .catch(() => {});
+    };
+    fetchUnread();
+    // 每 30 秒重新檢查一次
+    const timer = setInterval(fetchUnread, 30000);
+    return () => clearInterval(timer);
   }, []);
 
   async function logout() {
@@ -67,15 +80,23 @@ export default function Navbar() {
                 item.href === "/employee"
                   ? pathname === "/employee" || pathname.startsWith("/employee/")
                   : pathname.startsWith(item.href);
+              const isNotif = item.href === "/notifications";
+
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+                  className={`relative rounded-md px-3 py-2 text-sm font-semibold transition ${
                     active ? "bg-[var(--teal-400)] text-white" : "text-white/80 hover:bg-white/10 hover:text-white"
                   }`}
                 >
                   {item.label}
+                  {/* 通知按鈕右上紅點 */}
+                  {isNotif && unread > 0 && (
+                    <span className="absolute right-1 top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--error-fg)] px-1 text-[10px] font-bold text-white">
+                      {unread > 99 ? "99+" : unread}
+                    </span>
+                  )}
                 </Link>
               );
             })}
