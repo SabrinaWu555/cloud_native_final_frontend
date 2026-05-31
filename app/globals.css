@@ -26,6 +26,15 @@
   --error-bg: #fdebeb;
   --error-fg: #b4232f;
   --neutral-bg: #f4f4f2;
+
+
+  /* 福委會專用咖啡色系 */
+  --admin-coffee-50: #faf6f2;
+  --admin-coffee-100: #ede4d8;
+  --admin-coffee-400: #a47551;
+  --admin-coffee-600: #7b5535;
+  --admin-coffee-700: #5c3d24;
+  --admin-coffee-900: #3a2616;
 }
 
 @theme inline {

@@ -103,6 +103,18 @@ export default function Navbar() {
             <Link href="/" className="rounded-md px-3 py-2 text-sm font-semibold text-white/70 transition hover:bg-white/10 hover:text-white">
               入口
             </Link>
+            {user?.role === "admin" && (
+              <Link
+                href="/committee"
+                className="ml-2 rounded-md border border-[var(--admin-coffee-400)] px-3 py-2 text-sm font-semibold text-[var(--admin-coffee-100)] transition hover:bg-[var(--admin-coffee-400)] hover:text-white"
+                title="回到福委會管理畫面"
+              >
+                福委會端 →
+              </Link>
+          )}
+
+
+
           </nav>
 
           {/* 使用者資訊 + 頭像 */}
