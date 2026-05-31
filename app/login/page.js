@@ -1,48 +1,22 @@
+// app/login/page.js
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
-const roleMeta = {
-  employee: { label: "員工", title: "Employee Portal", fallback: "/employee" },
-  vendor: { label: "商家", title: "Vendor Console", fallback: "/vendor" },
-  committee: { label: "福委會", title: "Committee Desk", fallback: "/committee" },
-  admin: { label: "福委會", title: "Committee Desk", fallback: "/committee" },
+const ROLE_DESTINATIONS = {
+  admin: "/committee",
+  vendor: "/vendor",
+  employee: "/employee",
 };
 
-function safeNext(value) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "";
-  return value;
-}
-
 export default function LoginPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-[var(--neutral-bg)]" />}>
-      <LoginPanel />
-    </Suspense>
-  );
-}
-
-function LoginPanel() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const selectedRole = searchParams.get("role") || "employee";
-  const nextPath = safeNext(searchParams.get("next"));
-  const meta = roleMeta[selectedRole] || roleMeta.employee;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  const portalLinks = useMemo(
-    () => [
-      { key: "employee", label: "員工", href: "/login?role=employee&next=/employee" },
-      { key: "vendor", label: "商家", href: "/login?role=vendor&next=/vendor" },
-      { key: "committee", label: "福委會", href: "/login?role=committee&next=/committee" },
-    ],
-    [],
-  );
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -53,7 +27,7 @@ function LoginPanel() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, selectedRole }),
+        body: JSON.stringify({ email, password }),
       });
       const data = await res.json().catch(() => ({}));
 
@@ -62,8 +36,8 @@ function LoginPanel() {
         return;
       }
 
-      const destination =
-        nextPath || roleMeta[data.role]?.fallback || roleMeta[selectedRole]?.fallback || "/employee";
+      // 依後端回傳的 role 決定要跳到哪裡
+      const destination = ROLE_DESTINATIONS[data.role] || "/employee";
       router.push(destination);
       router.refresh();
     } catch {
@@ -77,19 +51,22 @@ function LoginPanel() {
     <main className="portal-shell grid min-h-screen px-4 py-8 sm:px-6 lg:grid-cols-[0.95fr_1.05fr] lg:px-10">
       <section className="motion-fade-up hidden items-center text-white lg:flex">
         <div className="max-w-lg">
-          <Link href="/" className="inline-flex items-center gap-3 rounded-md border border-white/20 bg-white/10 px-3 py-2 backdrop-blur">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-3 rounded-md border border-white/20 bg-white/10 px-3 py-2 backdrop-blur"
+          >
             <span className="flex h-10 w-10 items-center justify-center rounded bg-white text-xs font-black text-[var(--navy-800)]">
               TSMC
             </span>
             <span className="text-sm font-semibold text-white/80">企業訂餐平台</span>
           </Link>
           <p className="mt-8 text-sm font-bold uppercase tracking-[0.2em] text-[var(--teal-200)]">
-            {meta.title}
+            Login
           </p>
-          <h1 className="mt-3 text-5xl font-black leading-tight">登入 {meta.label} 工作台</h1>
-          {/* <p className="mt-5 text-base leading-7 text-[var(--navy-50)]">
-            每個角色都有獨立工作台，讓訂餐、出餐和案件處理維持清楚的責任邊界。
-          </p> */}
+          <h1 className="mt-3 text-5xl font-black leading-tight">歡迎使用<br />企業訂餐平台</h1>
+          <p className="mt-5 text-base leading-7 text-[var(--navy-50)]">
+            登入後系統會依您的身分（員工 / 商家 / 福委會）自動帶您進入對應的工作畫面。
+          </p>
         </div>
       </section>
 
@@ -102,32 +79,17 @@ function LoginPanel() {
               </span>
               <span>
                 <span className="block font-black text-[var(--navy-900)]">企業訂餐平台</span>
-                <span className="block text-xs font-semibold text-[var(--teal-600)]">
-                  {meta.label}登入
-                </span>
+                <span className="block text-xs font-semibold text-[var(--teal-600)]">登入</span>
               </span>
             </Link>
           </div>
 
-          <div className="mb-5 flex flex-wrap gap-2">
-            {portalLinks.map((item) => (
-              <Link
-                key={item.key}
-                href={item.href}
-                className={`rounded-md border px-3 py-2 text-sm font-bold transition ${
-                  item.key === selectedRole
-                    ? "border-[var(--teal-400)] bg-[var(--teal-50)] text-[var(--teal-600)]"
-                    : "border-[var(--line)] bg-white text-slate-600 hover:border-[var(--navy-100)]"
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </div>
-
           <div className="mb-6">
-            <p className="text-sm font-bold text-[var(--teal-600)]">{meta.label}登入</p>
+            <p className="text-sm font-bold text-[var(--teal-600)]">Login</p>
             <h2 className="mt-2 text-3xl font-black text-[var(--navy-900)]">歡迎回來</h2>
+            <p className="mt-2 text-sm text-slate-500">
+              請輸入您的帳號密碼，系統會依身分帶您前往對應畫面。
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">

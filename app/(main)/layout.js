@@ -10,10 +10,9 @@ export default async function MainLayout({ children }) {
 
   if (!token) redirect("/login");
 
-  // vendor 只能用商家畫面
+  // vendor 不該進員工/福委會頁面，跳商家畫面
+  // 現在 /vendor 不在 (main) 下，所以這個 redirect 不會迴圈
   if (role === "vendor") redirect("/vendor");
-
-  // admin 和 employee 都能進員工/訂單/通知/申訴頁面
 
   return (
     <div className="min-h-screen bg-[var(--neutral-bg)]">
