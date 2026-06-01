@@ -4,16 +4,27 @@ import { COOKIE_NAME, ENDPOINTS, SERVICES, apiFetch, jsonOrEmpty, serviceUrl } f
 import { MOCK_MENUS, MOCK_ORDERS } from "@/lib/mockData";
 
 async function getOrders() {
-  if (!SERVICES.order) return MOCK_ORDERS;
-
+  if (!SERVICES.order) {
+    console.warn("services.order is not configured, using mock orders");
+    return MOCK_ORDERS;
+  }
   const token = (await cookies()).get(COOKIE_NAME)?.value;
 
   try {
-    const res = await apiFetch(serviceUrl(SERVICES.order, ENDPOINTS.orders), { token });
-    if (!res.ok) return MOCK_ORDERS;
+    const url = serviceUrl(SERVICES.order, ENDPOINTS.vendorOrders);
+    console.log("Asking for vendor orders:", url);
+
+    const res = await apiFetch(url, { token });
+    console.log(`Vendor Orders status: ${res.status}`);
+
+    if (!res.ok) {
+      console.error(`Vendor Orders failed with status: ${res.status}`);
+      return MOCK_ORDERS;
+    }
     const data = await jsonOrEmpty(res);
     return Array.isArray(data) ? data : data.orders || MOCK_ORDERS;
-  } catch {
+  } catch (err) {
+    console.error("Network error while fetching vendor orders", err.message);
     return MOCK_ORDERS;
   }
 }
@@ -28,10 +39,11 @@ async function getMenus() {
     if (!res.ok) return MOCK_MENUS;
     const data = await jsonOrEmpty(res);
     return Array.isArray(data) ? data : data.menus || MOCK_MENUS;
-  } catch {
+  } catch (err) {
+    console.error("Network error while fetching vendor menus", err.message);
     return MOCK_MENUS;
   }
-}
+  }
 
 export default async function VendorPage() {
   const [orders, menus] = await Promise.all([getOrders(), getMenus()]);

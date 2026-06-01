@@ -1,152 +1,135 @@
-// app/(main)/vendor/billing/page.js
-import Link from "next/link";
+// app/(vendor)/vendor/billing/page.js
 import { cookies } from "next/headers";
-import {
-  COOKIE_NAME,
-  ENDPOINTS,
-  SERVICES,
-  apiFetch,
-  jsonOrEmpty,
-  serviceUrl,
+import Link from "next/link";
+import { 
+  COOKIE_NAME, 
+  SERVICES, 
+  ENDPOINTS, 
+  apiFetch, 
+  jsonOrEmpty, 
+  serviceUrl, 
   withPathParams,
+  parseJwt 
 } from "@/lib/api";
 
-const MOCK_STATEMENTS = [
-  { id: "STM-001", statement_period: "2026-04", total_amount: 24800, status: "synced",  synced_at: "2026-05-03T10:00:00Z" },
-  { id: "STM-002", statement_period: "2026-03", total_amount: 31200, status: "synced",  synced_at: "2026-04-02T09:30:00Z" },
-  { id: "STM-003", statement_period: "2026-02", total_amount: 18900, status: "pending", synced_at: null },
-];
-
-// 從 JWT 解出 userId（不需要額外 API call）
-function getUserIdFromToken(token) {
-  try {
-    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString());
-    return payload.userId ?? payload.id ?? null;
-  } catch {
-    return null;
-  }
-}
-
-async function getStatements() {
+// 取得帳單與違規資料
+async function getBillingData() {
   const token = (await cookies()).get(COOKIE_NAME)?.value;
-  if (!token || !SERVICES.billing) return MOCK_STATEMENTS;
+  if (!token) return { statements: [], incidents: [] };
 
-  const userId = getUserIdFromToken(token);
-  if (!userId) return MOCK_STATEMENTS;
+  // 解出當前登入商家的 userId
+  const { userId } = parseJwt(token);
+  if (!userId) return { statements: [], incidents: [] };
 
+  let statements = [];
+  let incidents = [];
+
+  // 1. 撈取帳單
   try {
-    // 用 /billing/statements/user/:id 取自己的結帳單
-    const path = withPathParams(ENDPOINTS.billingStatementsByUser, { id: userId });
-    const res  = await apiFetch(serviceUrl(SERVICES.billing, path), { token });
-    if (!res.ok) return MOCK_STATEMENTS;
+    const sUrl = serviceUrl(SERVICES.billing, withPathParams(ENDPOINTS.billingStatementsByUser, { id: userId }));
+    console.log("正在請求商家帳單:", sUrl);
+    const res = await apiFetch(sUrl, { token });
+    console.log(`Billing Statements 狀態碼: ${res.status}`);
     const data = await jsonOrEmpty(res);
-    return Array.isArray(data) ? data : data.statements || MOCK_STATEMENTS;
-  } catch {
-    return MOCK_STATEMENTS;
+    statements = Array.isArray(data) ? data : data.statements || [];
+  } catch (err) {
+    console.error("撈取帳單失敗:", err.message);
   }
-}
 
-const STATUS_MAP = {
-  synced:  { label: "已同步薪資", color: "bg-[var(--teal-50)] text-[var(--teal-600)] border-[var(--teal-400)]" },
-  pending: { label: "待結帳",     color: "bg-yellow-50 text-yellow-600 border-yellow-300" },
-  failed:  { label: "同步失敗",   color: "bg-red-50 text-red-500 border-red-300" },
-};
+  // 2. 撈取違規事件
+  try {
+    const iUrl = serviceUrl(SERVICES.billing, withPathParams(ENDPOINTS.billingIncidentsByUser, { id: userId }));
+    console.log("正在請求商家違規事件:", iUrl);
+    const res = await apiFetch(iUrl, { token });
+    console.log(`Billing Incidents 狀態碼: ${res.status}`);
+    const data = await jsonOrEmpty(res);
+    incidents = Array.isArray(data) ? data : data.incidents || [];
+  } catch (err) {
+    console.error("撈取違規事件失敗:", err.message);
+  }
+
+  return { statements, incidents };
+}
 
 export default async function VendorBillingPage() {
-  const statements   = await getStatements();
-  const totalSynced  = statements.filter((s) => s.status === "synced" ).reduce((sum, s) => sum + Number(s.total_amount ?? 0), 0);
-  const totalPending = statements.filter((s) => s.status !== "synced" ).reduce((sum, s) => sum + Number(s.total_amount ?? 0), 0);
+  const { statements, incidents } = await getBillingData();
 
   return (
     <div className="w-full space-y-6">
-
+      {/* 標題區 */}
       <section className="surface-panel rounded-lg px-4 py-5 sm:px-6 lg:px-7">
         <Link href="/vendor" className="text-xs font-semibold text-[var(--teal-600)] hover:underline">
           ← 返回工作台
         </Link>
-        <h1 className="mt-3 text-3xl font-black text-[var(--navy-900)]">帳務管理</h1>
-        <p className="mt-1 text-sm text-slate-500">查看每月結帳單與薪資扣款同步狀態</p>
-      </section>
-
-      <section className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-lg border-l-4 border-[var(--teal-400)] bg-[var(--teal-50)] p-5 text-[var(--teal-600)]">
-          <p className="text-sm font-bold">已結帳總額</p>
-          <p className="mt-2 text-3xl font-black">${totalSynced.toLocaleString()}</p>
-          <p className="mt-1 text-xs font-semibold opacity-70">已同步薪資系統</p>
-        </div>
-        <div className="rounded-lg border-l-4 border-yellow-400 bg-yellow-50 p-5 text-yellow-600">
-          <p className="text-sm font-bold">待結帳金額</p>
-          <p className="mt-2 text-3xl font-black">${totalPending.toLocaleString()}</p>
-          <p className="mt-1 text-xs font-semibold opacity-70">尚未同步</p>
-        </div>
-        <div className="rounded-lg border-l-4 border-[var(--navy-600)] bg-[var(--navy-50)] p-5 text-[var(--navy-600)]">
-          <p className="text-sm font-bold">結帳單筆數</p>
-          <p className="mt-2 text-3xl font-black">{statements.length}</p>
-          <p className="mt-1 text-xs font-semibold opacity-70">份</p>
+        <div className="mt-3">
+          <h1 className="text-3xl font-black text-[var(--navy-900)]">財務與對帳管理</h1>
+          <p className="mt-1 text-sm text-slate-500">查看您的歷史營收帳單與平台違規紀錄</p>
         </div>
       </section>
 
-      <section className="surface-panel overflow-hidden rounded-lg">
-        <div className="border-b border-[var(--line)] p-5">
-          <h2 className="text-lg font-black text-[var(--navy-900)]">月結帳單</h2>
-          <p className="mt-1 text-sm text-slate-500">每月由福委會系統自動產生，同步至公司薪資扣款系統</p>
-        </div>
-
-        {statements.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-slate-400">尚無結帳單</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
-              <thead className="bg-[var(--navy-50)] text-xs font-bold uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-5 py-3">結帳單編號</th>
-                  <th className="px-5 py-3">結帳區間</th>
-                  <th className="px-5 py-3">金額</th>
-                  <th className="px-5 py-3">同步時間</th>
-                  <th className="px-5 py-3">狀態</th>
+      {/* 帳單模組 */}
+      <section className="surface-panel rounded-lg p-5">
+        <h2 className="mb-4 text-lg font-black text-[var(--navy-900)]">歷史對帳單</h2>
+        
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+            <thead className="bg-[var(--navy-50)] text-xs font-bold uppercase text-slate-500">
+              <tr>
+                <th className="px-5 py-3">帳單編號</th>
+                <th className="px-5 py-3">結算區間</th>
+                <th className="px-5 py-3">總餐點份數</th>
+                <th className="px-5 py-3">結算總金額</th>
+                <th className="px-5 py-3">付款狀態</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {statements.map((s) => (
+                <tr key={s.id} className="hover:bg-[var(--surface-muted)]">
+                  <td className="px-5 py-4 font-semibold text-[var(--navy-900)]">#STMT-{s.id}</td>
+                  <td className="px-5 py-4 text-slate-600">{s.period || "2024-01"}</td>
+                  <td className="px-5 py-4 text-slate-600">{s.total_quantity ?? 0} 份</td>
+                  <td className="px-5 py-4 font-bold text-[var(--navy-600)]">${Number(s.total_amount ?? 0).toLocaleString()}</td>
+                  <td className="px-5 py-4">
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${s.status === 'paid' ? 'bg-[var(--teal-50)] text-[var(--teal-600)]' : 'bg-yellow-50 text-yellow-600'}`}>
+                      {s.status === 'paid' ? '已撥款' : '處理中'}
+                    </span>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {statements.map((s) => {
-                  const { label = s.status, color = "bg-slate-100 text-slate-500 border-slate-200" } =
-                    STATUS_MAP[s.status] ?? {};
-                  return (
-                    <tr key={s.id} className="bg-white transition hover:bg-[var(--surface-muted)]">
-                      <td className="px-5 py-4 font-semibold text-[var(--navy-900)]">{s.id}</td>
-                      <td className="px-5 py-4 text-slate-700">{s.statement_period ?? "-"}</td>
-                      <td className="px-5 py-4 font-black text-[var(--navy-900)]">
-                        ${Number(s.total_amount ?? 0).toLocaleString()}
-                      </td>
-                      <td className="px-5 py-4 text-slate-600">
-                        {s.synced_at
-                          ? new Date(s.synced_at).toLocaleString("zh-TW", {
-                              year: "numeric", month: "2-digit", day: "2-digit",
-                              hour: "2-digit", minute: "2-digit",
-                            })
-                          : "-"}
-                      </td>
-                      <td className="px-5 py-4">
-                        <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${color}`}>
-                          {label}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+              ))}
+            </tbody>
+          </table>
+          {!statements.length && (
+            <div className="p-8 text-center text-sm text-slate-500">目前尚無歷史對帳單。</div>
+          )}
+        </div>
       </section>
 
-      <section className="rounded-lg border border-[var(--navy-600)]/10 bg-[var(--navy-50)] px-5 py-4">
-        <p className="text-sm font-bold text-[var(--navy-600)]">帳務說明</p>
-        <p className="mt-1 text-sm text-slate-600">
-          結帳單由福委會每月批次產生，並自動透過薪資系統對員工進行扣款。
-          如有疑問請透過申訴系統反映，或聯繫廠區福委會。
-        </p>
+      {/* 違規紀錄模組 */}
+      <section className="surface-panel rounded-lg p-5">
+        <h2 className="mb-4 text-lg font-black text-[var(--navy-900)]">店家違規事件紀錄</h2>
+        <div className="space-y-3">
+          {incidents.map((i) => (
+            <div key={i.id} className="flex items-start justify-between rounded-lg border border-red-100 bg-red-50/30 p-4">
+              <div>
+                <h3 className="font-bold text-red-900">{i.title || "未依時供應餐點"}</h3>
+                <p className="mt-1 text-sm text-slate-600">{i.description || "經系統與員工回報，該商家未於約定時間內送達餐點。"}</p>
+                <p className="mt-2 text-xs text-slate-400">發生時間: {i.created_at?.slice(0, 10) ?? "—"}</p>
+              </div>
+              <div className="text-right">
+                <span className="inline-block rounded bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
+                  扣款懲罰: ${i.penalty_amount ?? 0}
+                </span>
+                <p className="mt-1 text-xs font-semibold text-slate-500">
+                  狀態: {i.status === 'resolved' ? '已處理' : '調查中'}
+                </p>
+              </div>
+            </div>
+          ))}
+          {!incidents.length && (
+            <div className="p-8 text-center text-sm text-slate-500 text-slate-400">表現優良！目前沒有任何違規事件紀錄。</div>
+          )}
+        </div>
       </section>
-
     </div>
   );
 }
