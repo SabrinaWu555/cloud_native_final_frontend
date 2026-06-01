@@ -12,39 +12,53 @@ import {
 } from "@/lib/api";
 import { MOCK_ORDERS } from "@/lib/mockData";
 
+// Order Service 的實際狀態值
 const STATUS_META = {
-  ordered:   { label: "已下單", className: "bg-[var(--navy-50)] text-[var(--navy-600)]" },
-  preparing: { label: "製作中", className: "bg-yellow-50 text-yellow-600" },
-  ready:     { label: "可領取", className: "bg-[var(--success-bg)] text-[var(--success-fg)]" },
+  pending:   { label: "待確認", className: "bg-yellow-50 text-yellow-600" },
+  confirmed: { label: "已確認", className: "bg-[var(--navy-50)] text-[var(--navy-600)]" },
   completed: { label: "已完成", className: "bg-slate-100 text-slate-600" },
   cancelled: { label: "已取消", className: "bg-[var(--error-bg)] text-[var(--error-fg)]" },
 };
 
-async function getOrders() {
+async function getOrders(rangeParam, fromParam, toParam) {
   if (USE_LOCAL_MOCKS) return MOCK_ORDERS;
 
   const token = (await cookies()).get(COOKIE_NAME)?.value;
   if (!SERVICES.order || !token) return MOCK_ORDERS;
 
   try {
-    const res = await apiFetch(serviceUrl(SERVICES.order, ENDPOINTS.orders), { token });
+    // 商家專用 endpoint：GET /vendor/orders
+    // 支援 range=today|upcoming|history 或 from/to 自訂區間
+    const base = serviceUrl(SERVICES.order, ENDPOINTS.vendorOrders ?? "/vendor/orders");
+    const qs   = new URLSearchParams();
+    if (rangeParam) qs.set("range", rangeParam);
+    if (fromParam)  qs.set("from",  fromParam);
+    if (toParam)    qs.set("to",    toParam);
+    const url  = qs.size ? `${base}?${qs}` : base;
+    console.log("Fetching orders with URL:", url);
+
+    const res  = await apiFetch(url, { token });
+    console.log("Raw response: ${res.status} ${res.statusText}");
+
     if (!res.ok) return MOCK_ORDERS;
     const data = await jsonOrEmpty(res);
+    console.log("Parsed data:", data);
 
-    const list = Array.isArray(data) ? data : data.orders || [];
+    const list = Array.isArray(data) ? data : data.orders ?? [];
 
     return list.map((o) => ({
       id:            `ORD-${o.id}`,
       raw_id:        o.id,
-      employee_name: o.employee_name || o.user_name || "—",
-      menu_name:     o.menu_name || "—",
+      // Order Service 不一定直接給 employee_name，先 fallback 到 user_id
+      employee_name: o.employee_name ?? o.user_name ?? (o.user_id ? `員工 #${o.user_id}` : "—"),
+      menu_name:     o.menu_name  ?? "—",
       status:        o.status,
-      order_date:    o.created_at?.slice(0, 10),
-      pickup_time:   o.pickup_time || o.pickup_date || null,
-      quantity:      Number(o.quantity ?? 1),
-      price:         Number(o.price ?? 0),
+      order_date:    o.created_at?.slice(0, 10) ?? null,
+      pickup_date:   o.pickup_date ?? null,
+      quantity:      Number(o.quantity  ?? 1),
+      price:         Number(o.price     ?? 0),
       total_amount:  Number(o.total_amount ?? 0) || Number(o.price ?? 0) * Number(o.quantity ?? 1),
-      cancel_reason: o.cancel_reason || "",
+      cancel_reason: o.cancel_reason ?? "",
     }));
   } catch {
     return MOCK_ORDERS;
@@ -52,38 +66,26 @@ async function getOrders() {
 }
 
 function statusMeta(status) {
-  return STATUS_META[status] || { label: status || "未知", className: "bg-slate-100 text-slate-600" };
+  return STATUS_META[status] ?? { label: status ?? "未知", className: "bg-slate-100 text-slate-600" };
 }
 
 function formatDate(dateStr) {
   if (!dateStr) return "-";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "-";
   return new Intl.DateTimeFormat("zh-TW", {
     month: "2-digit", day: "2-digit", weekday: "short",
-  }).format(new Date(dateStr));
-}
-
-function formatDateTime(dateStr) {
-  if (!dateStr) return "-";
-  
-  const d = new Date(dateStr);
-  
-  if (isNaN(d.getTime())) {
-    console.warn("發現不合法的日期字串:", dateStr);
-    return "-"; 
-  }
-  
-  return new Intl.DateTimeFormat("zh-TW", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
   }).format(d);
 }
 
 export default async function VendorOrdersPage({ searchParams }) {
-  const params   = await searchParams;
-  const status   = params?.status || "all";
-  const orders   = await getOrders();
+  const params     = await searchParams;
+  const status     = params?.status ?? "all";
+  const range      = params?.range  ?? "upcoming";   // 預設看「接下來」的訂單
+  const fromParam  = params?.from   ?? "";
+  const toParam    = params?.to     ?? "";
+
+  const orders   = await getOrders(range, fromParam, toParam);
   const filtered = status === "all" ? orders : orders.filter((o) => o.status === status);
 
   const counts = {
@@ -111,16 +113,28 @@ export default async function VendorOrdersPage({ searchParams }) {
               查看員工的訂餐紀錄，點進明細可查看完整資訊。
             </p>
           </div>
-          <form className="flex gap-2">
+
+          {/* 篩選列 */}
+          <form className="flex flex-wrap gap-2">
+            {/* 時間範圍 */}
+            <select
+              name="range"
+              defaultValue={range}
+              className="min-h-10 rounded-md border border-[var(--line)] bg-white px-3 text-sm outline-none focus:border-[var(--teal-400)] focus:ring-2 focus:ring-[var(--teal-200)]/50"
+            >
+              <option value="today">今天</option>
+              <option value="upcoming">即將到來</option>
+              <option value="history">歷史</option>
+            </select>
+            {/* 訂單狀態 */}
             <select
               name="status"
               defaultValue={status}
               className="min-h-10 rounded-md border border-[var(--line)] bg-white px-3 text-sm outline-none focus:border-[var(--teal-400)] focus:ring-2 focus:ring-[var(--teal-200)]/50"
             >
               <option value="all">全部狀態</option>
-              <option value="ordered">已下單</option>
-              <option value="preparing">製作中</option>
-              <option value="ready">可領取</option>
+              <option value="pending">待確認</option>
+              <option value="confirmed">已確認</option>
               <option value="completed">已完成</option>
               <option value="cancelled">已取消</option>
             </select>
@@ -160,7 +174,7 @@ export default async function VendorOrdersPage({ searchParams }) {
                 <th className="px-5 py-3">數量</th>
                 <th className="px-5 py-3">金額</th>
                 <th className="px-5 py-3">訂餐時間</th>
-                <th className="px-5 py-3">出餐時間</th>
+                <th className="px-5 py-3">取餐日期</th>
                 <th className="px-5 py-3">狀態</th>
                 <th className="px-5 py-3 text-right">操作</th>
               </tr>
@@ -178,9 +192,7 @@ export default async function VendorOrdersPage({ searchParams }) {
                       ${order.total_amount.toLocaleString()}
                     </td>
                     <td className="px-5 py-4 text-slate-600">{formatDate(order.order_date)}</td>
-                    <td className="px-5 py-4 text-slate-600">
-                      {order.target_time ? formatDateTime(order.target_time) : "-"}
-                    </td>
+                    <td className="px-5 py-4 text-slate-600">{formatDate(order.pickup_date)}</td>
                     <td className="px-5 py-4">
                       <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${meta.className}`}>
                         {meta.label}
@@ -219,7 +231,7 @@ export default async function VendorOrdersPage({ searchParams }) {
                   </span>
                 </div>
                 <div className="mt-3 flex items-center justify-between text-sm">
-                  <span className="text-slate-500">訂單 {formatDate(order.order_date)}</span>
+                  <span className="text-slate-500">取餐 {formatDate(order.pickup_date)}</span>
                   <span className="font-black text-[var(--navy-600)]">
                     ${order.total_amount.toLocaleString()}
                   </span>

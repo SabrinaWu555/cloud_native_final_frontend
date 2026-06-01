@@ -1,3 +1,4 @@
+// app/(vendor)/vendor/menus/page.js
 import { cookies } from "next/headers";
 import { COOKIE_NAME, ENDPOINTS, SERVICES, apiFetch, jsonOrEmpty, serviceUrl } from "@/lib/api";
 import { MOCK_MENUS } from "@/lib/mockData";
