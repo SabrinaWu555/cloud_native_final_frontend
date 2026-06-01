@@ -5,16 +5,41 @@ import {
   apiFetch, jsonOrEmpty, serviceUrl,
 } from "@/lib/api";
 import { MOCK_VENDORS, getMockVendorsByZone } from "@/lib/mockData";
-import { ZONES, isValidZone, zoneLabel, toBackendZone } from "@/lib/zones";import ZoneSelector from "@/components/ZoneSelector";
+import { ZONES, isValidZone, zoneLabel, toBackendZone } from "@/lib/zones";
+import ZoneSelector from "@/components/ZoneSelector";
 import VendorCard from "@/components/VendorCard";
 import AiRecommendation from "@/components/AiRecommendation";
 
+// 拿登入員工自己的廠區（"A" / "B" / "C"），沒有就回 null
+async function getEmployeeZone() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(COOKIE_NAME)?.value;
+  const userId = cookieStore.get("userId")?.value;
+
+  if (!token || !userId || !SERVICES.iam) return null;
+
+  try {
+    const res = await apiFetch(
+      serviceUrl(SERVICES.iam, `${ENDPOINTS.iamEmployees}/user/${encodeURIComponent(userId)}`),
+      { token }
+    );
+    if (!res.ok) return null;
+    const data = await jsonOrEmpty(res);
+    // 後端存 "A廠" / "B廠" / "C廠"，前端用 "A" / "B" / "C"
+    const factoryZone = data?.factory_zone || "";
+    const zone = factoryZone.replace(/區$/, "");
+    return isValidZone(zone) ? zone : null;
+  } catch {
+    return null;
+  }
+}
 
 async function getVendors(zone) {
   if (USE_LOCAL_MOCKS || !SERVICES.vendor) return getMockVendorsByZone(zone);
   const token = (await cookies()).get(COOKIE_NAME)?.value;
   try {
-    const url = serviceUrl(SERVICES.vendor, ENDPOINTS.vendors) + `?factoryZone=${encodeURIComponent(toBackendZone(zone))}`;    const res = await apiFetch(url, { token });
+    const url = serviceUrl(SERVICES.vendor, ENDPOINTS.vendors) + `?factoryZone=${encodeURIComponent(toBackendZone(zone))}`;
+    const res = await apiFetch(url, { token });
     if (!res.ok) return [];
     const data = await jsonOrEmpty(res);
     const list = Array.isArray(data) ? data : data.vendors || data.items || [];
@@ -28,7 +53,7 @@ async function getVendors(zone) {
       tags: v.tags || [],
       image_url: v.imageUrl || v.image_url || null,
       is_open: v.status ? v.status === "ACTIVE" : true,
-      zones: v.allowedAreas || (v.factoryZone ? [v.factoryZone] : []),
+      zones: v.factoryZones || v.allowedAreas || (v.factoryZone ? [v.factoryZone] : []),
     }));
   } catch {
     return [];
@@ -46,7 +71,18 @@ function filterVendors(vendors, query) {
 export default async function EmployeeHomePage({ searchParams }) {
   const params = await searchParams;
   const query = params?.q || "";
-  const zone = isValidZone(params?.zone) ? params.zone : ZONES[0].value;
+
+  // 決定預設廠區：
+  // 1. 網址有 ?zone=X 且合法 → 用網址（員工點別廠按鈕後也算這種）
+  // 2. 否則用員工自己的廠區
+  // 3. 都沒有就用第一個廠（admin、vendor fallback）
+  let zone;
+  if (isValidZone(params?.zone)) {
+    zone = params.zone;
+  } else {
+    const employeeZone = await getEmployeeZone();
+    zone = employeeZone || ZONES[0].value;
+  }
 
   const vendors = await getVendors(zone);
   const filtered = filterVendors(vendors, query);

@@ -11,44 +11,97 @@ const STATUS_META = {
   cancelled: { label: "已取消", className: "bg-[var(--error-bg)] text-[var(--error-fg)]" },
 };
 
+// 拿所有商家、做成 id → name 對照表
+async function getVendorMap() {
+  if (!SERVICES.vendor) return {};
+  const token = (await cookies()).get(COOKIE_NAME)?.value;
+  if (!token) return {};
+  try {
+    const res = await apiFetch(serviceUrl(SERVICES.vendor, ENDPOINTS.vendors), { token });
+    if (!res.ok) return {};
+    const data = await jsonOrEmpty(res);
+    const list = Array.isArray(data) ? data : data.vendors || [];
+    const map = {};
+    for (const v of list) map[v.id] = v.name;
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+
 async function getOrders() {
   if (USE_LOCAL_MOCKS) return MOCK_ORDERS;
 
-  // 打自己的 /api/orders（會帶 cookie 自動轉發到後端）
-  // 這是 server component，所以要用絕對網址
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
-
+  const role = cookieStore.get("role")?.value;
   if (!SERVICES.order || !token) return MOCK_ORDERS;
 
+  // admin 看全部、employee 看自己
+  const endpoint = role === "admin" ? ENDPOINTS.orders : ENDPOINTS.ordersMe;
+  const baseUrl = serviceUrl(SERVICES.order, endpoint);
+
   try {
-    // 直接打後端，跟 /api/orders/route.js 同樣邏輯但不繞一圈
-    const res = await apiFetch(serviceUrl(SERVICES.order, ENDPOINTS.ordersMe), { token });
-    if (!res.ok) return MOCK_ORDERS;
-    const data = await jsonOrEmpty(res);
+    // 同時撈三個 range 並合併
+    const [todayRes, upcomingRes, historyRes] = await Promise.all([
+      apiFetch(`${baseUrl}?range=today`, { token }),
+      apiFetch(`${baseUrl}?range=upcoming`, { token }),
+      apiFetch(`${baseUrl}?range=history`, { token }),
+    ]);
 
-    // 後端格式: { orders: [...], count: N }
-    const list = Array.isArray(data) ? data : data.orders || [];
+    const collect = async (res) => {
+      if (!res.ok) return [];
+      const d = await jsonOrEmpty(res);
+      return Array.isArray(d) ? d : (d.orders || []);
+    };
 
-    // 把後端的 snake_case 翻譯成前端期待的格式
-    return list.map((o) => ({
-      id: `ORD-${o.id}`,
-      raw_id: o.id,
-      vendor_id: o.vendor_id,
-      vendor_name: o.vendor_name || "—",
-      status: o.status,
-      order_date: o.created_at?.slice(0, 10),
-      target_date: o.pickup_date,
-      pickup_time: "12:20",
-      items: [{
-        menu_id: o.menu_id,
-        name: o.menu_name,
-        price: Number(o.price),
-        quantity: Number(o.quantity),
-      }],
-      total_amount: Number(o.price) * Number(o.quantity),
-      cancel_reason: o.cancel_reason || "",
-    }));
+    const [today, upcoming, history] = await Promise.all([
+      collect(todayRes),
+      collect(upcomingRes),
+      collect(historyRes),
+    ]);
+
+    const combined = [...today, ...upcoming, ...history];
+    const seen = new Set();
+    const unique = combined.filter((o) => {
+      if (seen.has(o.id)) return false;
+      seen.add(o.id);
+      return true;
+    });
+
+    // 依 pickup_date 倒序
+    unique.sort((a, b) => (b.pickup_date || "").localeCompare(a.pickup_date || ""));
+
+
+    console.log("🛒 後端回的訂單第一筆:", JSON.stringify(unique[0], null, 2));
+
+    // 翻譯為前端格式
+    // 先撈所有商家，建立 id → name 對照表
+    const vendorById = await getVendorMap();
+
+    return unique.map((o) => {
+      const price = Number(o.price_snapshot ?? o.price ?? 0);
+      const qty = Number(o.quantity ?? 1);
+      return {
+        id: `ORD-${o.id}`,
+        raw_id: o.id,
+        vendor_id: o.vendor_id,
+        vendor_name: vendorById[o.vendor_id] || "—",
+        status: o.status,
+        order_date: (o.order_date || o.created_at)?.slice(0, 10),
+        target_date: o.pickup_date,
+        pickup_time: "12:20",
+        items: [{
+          menu_id: o.menu_id,
+          name: o.menu_name,
+          price,
+          quantity: qty,
+        }],
+        total_amount: Number(o.total_price ?? price * qty),
+        cancel_reason: o.cancel_reason || "",
+      };
+    });
   } catch {
     return MOCK_ORDERS;
   }

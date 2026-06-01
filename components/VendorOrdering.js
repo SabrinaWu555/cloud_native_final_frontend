@@ -1,6 +1,6 @@
-// components/VendorOrdering.js
+// components/VendorOrdering.js — 商家詳情頁的菜單 + 購物車 + 多日期下單
 "use client";
-import { useMemo, useState } from "react";
+import {  useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import DateSelector from "@/components/DateSelector";
 import { getNextDays } from "@/lib/dates";
@@ -11,6 +11,26 @@ export default function VendorOrdering({ vendor, menus }) {
 
   const [dates, setDates] = useState([days[0].value]);
   const [cart, setCart] = useState({});
+  const [stockMap, setStockMap] = useState({});
+  // 當日期切換時，重撈該日期的庫存
+  useEffect(() => {
+    if (dates.length === 0) {
+      setStockMap({});
+      return;
+    }
+    // 只查第一個選中的日期（簡化）
+    const firstDate = dates[0];
+    const menuIds = menus.map((m) => m.id);
+    fetch("/api/inventory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ menuIds, date: firstDate }),
+    })
+      .then((r) => (r.ok ? r.json() : { inventory: {} }))
+      .then((data) => setStockMap(data.inventory || {}))
+      .catch(() => setStockMap({}));
+  }, [dates, menus]);
+
   const [status, setStatus] = useState("idle");
   const [message, setMessage] = useState("");
 
@@ -20,9 +40,13 @@ export default function VendorOrdering({ vendor, menus }) {
     return m;
   }, [menus]);
 
-  const remainingOf = (menu) => Number(menu?.daily_limit ?? menu?.remaining ?? 0);
+  const remainingOf = (menu) => {
+    // 先看即時庫存（後端 daily_inventory），沒有再 fallback dailyLimit
+    const stock = stockMap[menu.id];
+    if (stock !== null && stock !== undefined) return Number(stock);
+    return Number(menu?.daily_limit ?? menu?.remaining ?? 0);
+  };
 
-  // ★ 用來判斷某個餐點是否「至少有一天還有貨」，決定按鈕能不能按
   const hasAnyStock = (menu) => remainingOf(menu) > 0;
 
   function addToCart(menuId) {
@@ -57,12 +81,18 @@ export default function VendorOrdering({ vendor, menus }) {
 
   const cartList = Object.entries(cart).map(([key, item]) => {
     const menu = menuById[item.menuId];
-    return { key, menu, date: item.date, qty: item.qty, subtotal: (menu?.price || 0) * item.qty };
+    return {
+      key,
+      menu,
+      date: item.date,
+      qty: item.qty,
+      subtotal: (menu?.price || 0) * item.qty,
+    };
   });
   const totalQty = cartList.reduce((s, i) => s + i.qty, 0);
   const totalAmount = cartList.reduce((s, i) => s + i.subtotal, 0);
 
-  // ★ 將購物車按「餐點」分組，下面菜單卡片用來顯示「各日數量」
+  // 購物車按「餐點」分組，讓菜單卡顯示「各日數量」
   const cartByMenu = useMemo(() => {
     const map = {};
     for (const it of cartList) {
@@ -77,6 +107,7 @@ export default function VendorOrdering({ vendor, menus }) {
     setStatus("loading");
     setMessage("");
 
+    // 按日期分組，一張訂單一個 POST（後端會拆成多個 item）
     const byDate = {};
     for (const it of cartList) {
       if (!byDate[it.date]) byDate[it.date] = [];
@@ -106,8 +137,11 @@ export default function VendorOrdering({ vendor, menus }) {
             items,
           }),
         });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
+        const data = await res.json().catch(() => ({}));
+
+        // 後端可能回 207 + failureCount > 0，這代表部分或全部失敗
+        const realSuccess = res.ok && (data.failureCount === undefined || data.failureCount === 0);
+        if (!realSuccess) {
           failedDate = date;
           failMsg = data.message || "送出失敗";
           break;
@@ -140,33 +174,46 @@ export default function VendorOrdering({ vendor, menus }) {
           {menus.map((menu) => {
             const remaining = remainingOf(menu);
             const soldOut = !hasAnyStock(menu);
-            const inCart = cartByMenu[menu.id] || []; // ★ 這個餐點在購物車裡的所有日期
+            const inCart = cartByMenu[menu.id] || [];
 
             return (
-              <article key={menu.id} className="surface-panel flex h-full flex-col overflow-hidden rounded-lg">
+              <article
+                key={menu.id}
+                className="surface-panel flex h-full flex-col overflow-hidden rounded-lg"
+              >
                 <div className="aspect-[16/10] w-full bg-gradient-to-br from-[var(--navy-50)] via-white to-[var(--teal-50)]">
                   {menu.image_url ? (
-                    <div role="img" aria-label={menu.name} className="h-full w-full bg-cover bg-center" style={{ backgroundImage: `url(${menu.image_url})` }} />
+                    <div
+                      role="img"
+                      aria-label={menu.name}
+                      className="h-full w-full bg-cover bg-center"
+                      style={{ backgroundImage: `url(${menu.image_url})` }}
+                    />
                   ) : (
                     <div className="flex h-full items-center justify-center text-2xl">🍱</div>
                   )}
                 </div>
+
                 <div className="flex flex-1 flex-col p-4">
                   <div className="flex items-start justify-between gap-3">
                     <h3 className="text-base font-bold text-[var(--navy-900)]">{menu.name}</h3>
-                    <span className="shrink-0 text-lg font-black text-[var(--navy-600)]">${menu.price}</span>
+                    <span className="shrink-0 text-lg font-black text-[var(--navy-600)]">
+                      ${menu.price}
+                    </span>
                   </div>
+
                   <div className="mt-2 flex flex-wrap gap-2">
                     {(menu.tags || []).slice(0, 3).map((t) => (
-                      <span key={t} className="rounded-full bg-[var(--success-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--success-fg)]">{t}</span>
+                      <span
+                        key={t}
+                        className="rounded-full bg-[var(--success-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--success-fg)]"
+                      >
+                        {t}
+                      </span>
                     ))}
                   </div>
 
-                  {/*
-                    ★ 修改點 2：
-                    - 還沒加入購物車 → 不秀剩餘數
-                    - 已加入 → 列出已選的日期 + 該日剩餘
-                  */}
+                  {/* 加入購物車後才顯示「各日已選 + 剩餘」 */}
                   {inCart.length > 0 && (
                     <div className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-xs">
                       {inCart.map(({ key, date, qty }) => {
@@ -210,12 +257,25 @@ export default function VendorOrdering({ vendor, menus }) {
                   <li key={key} className="flex items-center justify-between gap-2 text-sm">
                     <div className="min-w-0">
                       <p className="truncate font-semibold text-slate-900">{menu.name}</p>
-                      <p className="text-xs text-slate-500">{date}・${menu.price} × {qty}</p>
+                      <p className="text-xs text-slate-500">
+                        {date}・${menu.price} × {qty}
+                      </p>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <button onClick={() => setQty(key, qty - 1)} className="h-7 w-7 rounded bg-[var(--navy-50)] font-bold text-[var(--navy-600)]">−</button>
+                      <button
+                        onClick={() => setQty(key, qty - 1)}
+                        className="h-7 w-7 rounded bg-[var(--navy-50)] font-bold text-[var(--navy-600)]"
+                      >
+                        −
+                      </button>
                       <span className="w-5 text-center font-bold">{qty}</span>
-                      <button onClick={() => setQty(key, qty + 1)} disabled={qty >= remainingOf(menu)} className="h-7 w-7 rounded bg-[var(--navy-50)] font-bold text-[var(--navy-600)] disabled:opacity-40">＋</button>
+                      <button
+                        onClick={() => setQty(key, qty + 1)}
+                        disabled={qty >= remainingOf(menu)}
+                        className="h-7 w-7 rounded bg-[var(--navy-50)] font-bold text-[var(--navy-600)] disabled:opacity-40"
+                      >
+                        ＋
+                      </button>
                     </div>
                   </li>
                 ))}
@@ -240,10 +300,17 @@ export default function VendorOrdering({ vendor, menus }) {
             </button>
 
             {message && (
-              <p className={`mt-3 text-sm ${status === "error" ? "text-[var(--error-fg)]" : "text-[var(--success-fg)]"}`}>{message}</p>
+              <p className={`mt-3 text-sm ${status === "error" ? "text-[var(--error-fg)]" : "text-[var(--success-fg)]"}`}>
+                {message}
+              </p>
             )}
             {status === "done" && (
-              <a href="/orders" className="mt-2 block text-center text-sm font-bold text-[var(--navy-600)] hover:underline">前往查看歷史訂單 →</a>
+              <a
+                href="/orders"
+                className="mt-2 block text-center text-sm font-bold text-[var(--navy-600)] hover:underline"
+              >
+                前往查看歷史訂單 →
+              </a>
             )}
           </div>
         </aside>

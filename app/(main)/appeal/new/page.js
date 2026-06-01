@@ -47,10 +47,16 @@ export default function NewAppealPage() {
     setError("");
     setNotice("");
     try {
+      const rawOrderId = String(form.orderId).replace(/^ORD-/, "");
       const res = await fetch("/api/appeals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: form.orderId, order_id: form.orderId, reason: form.reason, message: form.message }),
+        body: JSON.stringify({
+          orderId: rawOrderId,
+          order_id: rawOrderId,
+          reason: form.reason,
+          message: form.message,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || "申訴送出失敗");

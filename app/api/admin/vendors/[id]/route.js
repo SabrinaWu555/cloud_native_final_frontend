@@ -40,7 +40,7 @@ export async function PUT(request, { params }) {
   }
 }
 
-// 違規扣分（會帶 ?action=violation）
+// 違規扣分 + 停權 + 復權，用 ?action= 區分
 export async function POST(request, { params }) {
   const { id } = await params;
   if (!SERVICES.vendor) return NextResponse.json({ message: "服務未設定" }, { status: 503 });
@@ -49,15 +49,18 @@ export async function POST(request, { params }) {
   const action = searchParams.get("action");
   const body = await request.json().catch(() => ({}));
 
-  if (action !== "violation") {
-    return NextResponse.json({ message: "action 必須是 violation" }, { status: 400 });
-  }
+  let path;
+  if (action === "violation") path = `/api/v1/admin/vendors/${encodeURIComponent(id)}/violation-points`;
+  else if (action === "suspend") path = `/api/v1/admin/vendors/${encodeURIComponent(id)}/suspend`;
+  else if (action === "reactivate") path = `/api/v1/admin/vendors/${encodeURIComponent(id)}/reactivate`;
+  else return NextResponse.json({ message: "action 必須是 violation / suspend / reactivate" }, { status: 400 });
 
   try {
-    const res = await apiFetch(
-      `${SERVICES.vendor}/api/v1/admin/vendors/${encodeURIComponent(id)}/violation-points`,
-      { token, method: "POST", body }
-    );
+    const res = await apiFetch(`${SERVICES.vendor}${path}`, {
+      token,
+      method: "POST",
+      body,
+    });
     const data = await jsonOrEmpty(res);
     return NextResponse.json(data, { status: res.status });
   } catch {

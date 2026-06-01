@@ -100,9 +100,6 @@ export default function Navbar() {
                 </Link>
               );
             })}
-            <Link href="/" className="rounded-md px-3 py-2 text-sm font-semibold text-white/70 transition hover:bg-white/10 hover:text-white">
-              入口
-            </Link>
             {user?.role === "admin" && (
               <Link
                 href="/committee"
@@ -123,9 +120,13 @@ export default function Navbar() {
               <p className="text-sm font-bold leading-tight">{displayName}</p>
               <p className="text-xs text-[var(--teal-200)]">{user?.role || "—"}</p>
             </div>
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--teal-400)] font-black text-white">
+            <Link
+              href="/profile"
+              title="個人資料"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--teal-400)] font-black text-white transition hover:scale-110"
+            >
               {avatarChar}
-            </div>
+            </Link>
             <button onClick={logout} className="rounded-md border border-white/20 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/10">
               登出
             </button>
