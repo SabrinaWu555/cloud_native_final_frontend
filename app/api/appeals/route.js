@@ -1,13 +1,13 @@
-// app/api/appeals/route.js
+// app/api/appeals/route.js — 申訴 BFF
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import {
   COOKIE_NAME, ENDPOINTS, SERVICES, USE_LOCAL_MOCKS,
-  apiFetch, jsonOrEmpty, serviceUrl, withPathParams,
+  apiFetch, jsonOrEmpty, serviceUrl,
 } from "@/lib/api";
 import { MOCK_APPEALS } from "@/lib/mockData";
 
-// 後端 status → 前端 status（沿用你原本的詞彙）
+// 後端 status → 前端 status
 function mapStatusFromBackend(s) {
   if (s === "pending") return "submitted";
   if (s === "approved") return "resolved";
@@ -15,24 +15,28 @@ function mapStatusFromBackend(s) {
   return s || "submitted";
 }
 
-// 把後端的 appeal 翻譯成前端習慣的格式
-// 後端的 reason 是「[類型代碼] 文字描述」的合併字串，這裡拆回兩個欄位
-function toFrontend(a) {
-  let reasonCode = "other";
-  let message = a.reason || "";
+// 後端的 reason 是「[類型代碼] 文字描述」的合併字串，拆回兩個欄位
+function parseReason(reason) {
+  let code = "other";
+  let message = reason || "";
   const m = /^\[([^\]]+)\]\s*(.*)$/s.exec(message);
   if (m) {
-    reasonCode = m[1];
+    code = m[1];
     message = m[2];
   }
+  return { code, message };
+}
+
+function toFrontend(a) {
+  const { code, message } = parseReason(a.reason);
   return {
-    id: `APL-${a.id}`,           // 給前端看的字串 ID
-    raw_id: a.id,                 // 後端真實的數字 ID（之後 PATCH/DELETE 會用）
+    id: `APL-${a.id}`,
+    raw_id: a.id,
     order_id: a.order_id,
     employee_id: a.employee_id,
     vendor_id: a.vendor_id,
-    reason: reasonCode,           // 類型代碼
-    message,                      // 描述文字
+    reason: code,
+    message,
     status: mapStatusFromBackend(a.status),
     refund_amount: a.refund_amount,
     admin_notes: a.admin_notes,
@@ -61,17 +65,15 @@ export async function POST(request) {
   const token = cookieStore.get(COOKIE_NAME)?.value;
   const userId = Number(cookieStore.get("userId")?.value);
 
-  // 你的訂單 id 目前是字串(ORD-...)，後端要 integer → 暫時用 demo 編號
-  // 等訂單服務接上後，會是真的數字 id
-  const orderIdRaw = payload.orderId || payload.order_id;
-  const orderIdInt = Number.isFinite(Number(orderIdRaw)) ? Number(orderIdRaw) : 1;
-  // ↑ 訂單服務還沒接，先用 1 讓申訴能送進去；等接上後會是真的訂單 id
+  // 拆掉前端的 ORD- 前綴,直接傳純 UUID 給後端
+  const rawOrderInput = payload.orderId || payload.order_id;
+  const orderId = String(rawOrderInput).replace(/^ORD-/, "");
+
   // 把前端的「類型 + 描述」合併成後端要的 reason 一個欄位
   const reason = `[${payload.reason || "other"}] ${payload.message}`;
 
-  // 員工建立時必須帶 employee_id = userId，否則後端會擋
   const body = {
-    order_id: orderIdInt,
+    order_id: orderId,           // 純 UUID 字串
     reason,
     employee_id: userId,
   };
@@ -85,7 +87,7 @@ export async function POST(request) {
     const data = await jsonOrEmpty(res);
     if (!res.ok) {
       return NextResponse.json(
-        { message: data.error || "送出申訴失敗" },
+        { message: data.error || data.message || "送出申訴失敗" },
         { status: res.status }
       );
     }
@@ -102,11 +104,13 @@ export async function GET() {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
   const userId = cookieStore.get("userId")?.value;
+  const role = cookieStore.get("role")?.value;
 
-  // 員工只能打 by-user；admin 兩種都行，我們統一也走 by-user 比較單純
-  const path = userId
-    ? `${ENDPOINTS.appeals}/user/${encodeURIComponent(userId)}`
-    : ENDPOINTS.appeals;
+  // employee 只看自己,admin 看全部
+  const path =
+    role === "admin"
+      ? ENDPOINTS.appeals
+      : `${ENDPOINTS.appeals}/user/${encodeURIComponent(userId)}`;
 
   try {
     const res = await apiFetch(serviceUrl(SERVICES.appeal, path), { token });

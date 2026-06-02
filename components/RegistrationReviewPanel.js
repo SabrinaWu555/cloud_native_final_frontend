@@ -19,6 +19,7 @@ export default function RegistrationReviewPanel({ applicationId, vendorName }) {
     setSaving(true);
     setError("");
     try {
+      // Step 1: 改 status + 取得 tempPassword
       const res = await fetch(`/api/admin/registrations/${applicationId}?action=${action}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -26,6 +27,34 @@ export default function RegistrationReviewPanel({ applicationId, vendorName }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || data.error || "操作失敗");
+
+      // Step 2: 寄信通知商家
+      try {
+        const emailRes = await fetch("/api/admin/registrations/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action,
+            email: data.email,
+            // 核准：用 tempPassword 當密碼
+            ...(action === "approve" && {
+              account: data.email,
+              password: data.tempPassword,
+            }),
+            // 駁回：用 reviewNotes 當理由
+            ...(action === "reject" && {
+              reason: reviewNotes || "未提供理由",
+            }),
+          }),
+        });
+        if (!emailRes.ok) {
+          // 信寄失敗不擋整個流程，只警告
+          console.warn("寄信失敗，但 status 已更新成功");
+        }
+      } catch (emailErr) {
+        console.warn("寄信失敗:", emailErr);
+      }
+
       setResult(data);
       router.refresh();
     } catch (err) {

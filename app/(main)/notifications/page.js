@@ -1,4 +1,3 @@
-// app/(main)/notifications/page.js — 通知中心（列表）
 import Link from "next/link";
 import { cookies } from "next/headers";
 import {
@@ -10,10 +9,10 @@ import MarkAllReadButton from "@/components/MarkAllReadButton";
 
 export const dynamic = "force-dynamic";
 
+// 統一分類：兼容舊資料 (例如 pickup)，確保顯示樣式只有這兩種
 const TYPE_META = {
-  pickup: { label: "領餐", className: "border-[var(--teal-400)] bg-[var(--teal-50)] text-[var(--teal-600)]" },
-  cancel: { label: "取消", className: "border-[var(--error-fg)] bg-[var(--error-bg)] text-[var(--error-fg)]" },
-  today: { label: "今日訂單", className: "border-[var(--navy-600)] bg-[var(--navy-50)] text-[var(--navy-600)]" },
+  create: { label: "訂單建立", className: "border-[var(--teal-400)] bg-[var(--teal-50)] text-[var(--teal-600)]" },
+  cancel: { label: "訂單取消", className: "border-[var(--error-fg)] bg-[var(--error-bg)] text-[var(--error-fg)]" },
 };
 
 async function getNotifications() {
@@ -37,10 +36,20 @@ function formatDateTime(value) {
   return new Intl.DateTimeFormat("zh-TW", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 }
 
+// 輔助函式：確保每一筆通知都能被正確分類為 create 或 cancel
+function getNotificationCategory(item) {
+  const isCancel = item.type === "cancel" || String(item.title).includes("取消");
+  return isCancel ? "cancel" : "create"; // 只要不是取消，就歸類為建立
+}
+
 export default async function NotificationsPage() {
   const items = await getNotifications();
-  const isUnread = (n) => !n.read_at && !n.read;
+  const isUnread = (n) => !n.read_at && !n.is_read;
+  
+  // 計算總數
   const unreadCount = items.filter(isUnread).length;
+  const cancelCount = items.filter((i) => getNotificationCategory(i) === "cancel").length;
+  const createCount = items.filter((i) => getNotificationCategory(i) === "create").length;
 
   return (
     <div className="mx-auto w-full max-w-[1440px] space-y-6">
@@ -49,38 +58,69 @@ export default async function NotificationsPage() {
           <div>
             <p className="text-sm font-bold uppercase tracking-[0.18em] text-[var(--teal-600)]">Notifications</p>
             <h1 className="mt-2 text-3xl font-black text-[var(--navy-900)]">通知中心</h1>
-            <p className="mt-2 text-sm text-slate-600">點開通知閱讀內容。</p>
+            <p className="mt-2 text-sm text-slate-600">隨時掌握訂單的最新動態。</p>
           </div>
           <MarkAllReadButton disabled={!unreadCount} />
         </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
+        {/* 未讀通知：顏色改回原版的 var(--navy) 變數 */}
         <Stat label="未讀通知" value={unreadCount} tone="blue" />
-        <Stat label="今日訂單提醒" value={items.filter((i) => i.type === "today").length} tone="green" />
-        <Stat label="取消通知" value={items.filter((i) => i.type === "cancel").length} tone="red" />
+        <Stat label="訂單已建立" value={createCount} tone="green" />
+        <Stat label="訂單已取消" value={cancelCount} tone="red" />
       </section>
 
-      <section className="surface-panel overflow-hidden rounded-lg">
+      <section className="surface-panel overflow-hidden rounded-lg shadow-sm border border-slate-100">
         {!items.length ? (
-          <div className="p-8 text-center text-sm text-slate-500">目前沒有通知。</div>
+          <div className="p-8 text-center text-sm text-slate-500">目前沒有任何通知。</div>
         ) : (
           <div className="divide-y divide-slate-100">
             {items.map((item) => {
-              const meta = TYPE_META[item.type] || { label: "系統", className: "border-slate-300 bg-slate-100 text-slate-600" };
+              // 取得確保一致的分類
+              const category = getNotificationCategory(item);
+              const meta = TYPE_META[category];
               const unread = isUnread(item);
+              
               return (
-                <Link key={item.id} href={`/notifications/${item.id}`} className="grid gap-4 p-5 transition hover:bg-[var(--surface-muted)] lg:grid-cols-[auto_1fr_auto] lg:items-center">
-                  <span className={`w-fit rounded-full border px-3 py-1 text-xs font-bold ${meta.className}`}>{meta.label}</span>
+                <Link 
+                  key={item.id} 
+                  href={`/notifications/${item.id}`} 
+                  // 移除之前的藍色背景，改回單純的底色變化
+                  className={`grid gap-4 p-5 transition lg:grid-cols-[auto_1fr_auto] lg:items-center ${
+                    unread ? "bg-[var(--surface-muted)] hover:bg-slate-100" : "bg-white hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    {/* 未讀紅點標示改回原本無背景，依靠未讀標籤 */}
+                    <span className={`w-fit rounded-full border px-3 py-1 text-xs font-bold ${meta.className}`}>
+                      {meta.label}
+                    </span>
+                  </div>
+                  
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-base font-black text-[var(--navy-900)]">{item.title}</h2>
-                      {unread && <span className="rounded-full bg-[var(--error-fg)] px-2 py-0.5 text-xs font-bold text-white">未讀</span>}
+                      <h2 className="text-base font-black text-[var(--navy-900)]">
+                        {item.title}
+                      </h2>
+                      {/* 恢復原版的「未讀」Badge */}
+                      {unread && (
+                        <span className="rounded-full bg-[var(--error-fg)] px-2 py-0.5 text-xs font-bold text-white">
+                          未讀
+                        </span>
+                      )}
                     </div>
-                    <p className="mt-1 line-clamp-1 text-sm text-slate-600">{item.message}</p>
-                    <p className="mt-2 text-xs font-semibold text-slate-400">{formatDateTime(item.created_at)}</p>
+                    <p className="mt-1 line-clamp-1 text-sm text-slate-600">
+                      {item.message}
+                    </p>
+                    <p className="mt-2 text-xs font-semibold text-slate-400">
+                      {formatDateTime(item.created_at)}
+                    </p>
                   </div>
-                  <span className="text-sm font-bold text-[var(--navy-600)]">查看 →</span>
+                  
+                  <span className="text-sm font-bold text-[var(--navy-600)] hidden lg:block">
+                    查看內容 →
+                  </span>
                 </Link>
               );
             })}
@@ -92,12 +132,14 @@ export default async function NotificationsPage() {
 }
 
 function Stat({ label, value, tone }) {
+  // 將 tone="blue" 的樣式完美還原為你最初始的 var(--navy) 設定
   const className =
     tone === "green"
       ? "border-[var(--teal-400)] bg-[var(--teal-50)] text-[var(--teal-600)]"
       : tone === "red"
         ? "border-[var(--error-fg)] bg-[var(--error-bg)] text-[var(--error-fg)]"
         : "border-[var(--navy-600)] bg-[var(--navy-50)] text-[var(--navy-600)]";
+        
   return (
     <div className={`border-l-4 p-5 ${className}`}>
       <p className="text-sm font-bold">{label}</p>

@@ -3,20 +3,15 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-const STATUS_META = {
-  pending: { label: "待結算", className: "bg-[var(--warning-bg)] text-[var(--warning-fg)]" },
-  paid: { label: "已結算", className: "bg-[var(--success-bg)] text-[var(--success-fg)]" },
-  closed: { label: "已關帳", className: "bg-slate-100 text-slate-600" },
-};
-
 function formatCurrency(n) {
   return "NT$ " + Number(n || 0).toLocaleString();
 }
 
-function formatDate(s) {
+function formatDateTime(s) {
   if (!s) return "—";
   return new Intl.DateTimeFormat("zh-TW", {
-    year: "numeric", month: "2-digit", day: "2-digit"
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit",
   }).format(new Date(s));
 }
 
@@ -42,24 +37,35 @@ export default function BillingDashboard({ statements, vendors }) {
   // 篩選
   const filtered = useMemo(() => {
     if (!periodFilter) return statements;
-    return statements.filter((s) => (s.period || "").startsWith(periodFilter));
+    return statements.filter((s) => (s.statement_period || s.period || "").startsWith(periodFilter));
   }, [statements, periodFilter]);
 
   // 統計
   const stats = useMemo(() => {
-    const total = filtered.reduce((s, x) => s + Number(x.total_amount || 0), 0);
-    const counts = {
-      pending: filtered.filter((s) => s.status === "pending").length,
-      paid: filtered.filter((s) => s.status === "paid").length,
-      closed: filtered.filter((s) => s.status === "closed").length,
+    const totalAmount = filtered.reduce((sum, x) => sum + Number(x.total_amount || 0), 0);
+    const totalOrders = filtered.reduce((sum, x) => sum + Number(x.order_count || 0), 0);
+    return {
+      totalAmount,
+      totalOrders,
+      count: filtered.length,
     };
-    return { total, counts };
   }, [filtered]);
 
-  // 商家對照表（用 vendor_id 找名字）
-  const vendorById = useMemo(() => {
+  // 萬能商家對照表：UUID（有/無 dash） + user_id（integer/string）→ 商家名稱
+  // 後端 billing 不管回什麼格式都能對應回商家名稱
+  const vendorLookup = useMemo(() => {
     const m = {};
-    for (const v of vendors) m[v.id] = v.name;
+    for (const v of vendors) {
+      if (v.id) {
+        m[v.id] = v.name;                            // 標準 UUID 有 dash
+        m[v.id.replace(/-/g, "")] = v.name;          // UUID 沒 dash
+      }
+      const uid = v.userId ?? v.user_id;
+      if (uid !== undefined && uid !== null) {
+        m[uid] = v.name;                              // integer user_id
+        m[String(uid)] = v.name;                      // string 化的 user_id
+      }
+    }
     return m;
   }, [vendors]);
 
@@ -80,14 +86,14 @@ export default function BillingDashboard({ statements, vendors }) {
       alert("沒有資料可匯出");
       return;
     }
-    const header = ["帳單編號", "商家", "結算期間", "總金額", "狀態", "建立日期"];
+    const header = ["帳單編號", "商家", "結算期間", "訂單筆數", "總金額", "同步時間"];
     const rows = filtered.map((s) => [
       s.id,
-      vendorById[s.vendor_id] || `(${s.vendor_id})`,
-      s.period || "—",
+      vendorLookup[s.vendor_id] || `未知商家 (${String(s.vendor_id).slice(0, 12)}...)`,
+      s.statement_period || s.period || "—",
+      Number(s.order_count || 0),
       Number(s.total_amount || 0),
-      STATUS_META[s.status]?.label || s.status,
-      formatDate(s.created_at),
+      formatDateTime(s.synced_at || s.created_at),
     ]);
 
     const csv = [header, ...rows]
@@ -113,7 +119,7 @@ export default function BillingDashboard({ statements, vendors }) {
               Billing
             </p>
             <h1 className="mt-2 text-3xl font-black text-[var(--admin-coffee-900)]">帳單管理</h1>
-            <p className="mt-1 text-sm text-slate-500">管理每月商家結算、匯出 CSV 報表</p>
+            <p className="mt-1 text-sm text-slate-500">建立每月商家結算快照，匯出 CSV 給會計</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -131,25 +137,21 @@ export default function BillingDashboard({ statements, vendors }) {
           </div>
         </div>
 
-        {/* 統計列 */}
-        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <div className="rounded-md bg-[var(--admin-coffee-50)] p-3">
+        {/* 統計列：總金額 + 帳單數 + 訂單筆數 */}
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-md bg-[var(--admin-coffee-50)] p-4">
             <p className="text-xs font-semibold text-slate-600">{periodFilter || "全部"}總金額</p>
             <p className="mt-1 text-2xl font-black text-[var(--admin-coffee-700)]">
-              {formatCurrency(stats.total)}
+              {formatCurrency(stats.totalAmount)}
             </p>
           </div>
-          <div className="rounded-md bg-[var(--warning-bg)] p-3 text-center">
-            <p className="text-2xl font-black text-[var(--warning-fg)]">{stats.counts.pending}</p>
-            <p className="mt-1 text-xs font-semibold text-slate-600">待結算</p>
+          <div className="rounded-md bg-[var(--navy-50)] p-4">
+            <p className="text-xs font-semibold text-slate-600">帳單數</p>
+            <p className="mt-1 text-2xl font-black text-[var(--navy-700)]">{stats.count} 筆</p>
           </div>
-          <div className="rounded-md bg-[var(--success-bg)] p-3 text-center">
-            <p className="text-2xl font-black text-[var(--success-fg)]">{stats.counts.paid}</p>
-            <p className="mt-1 text-xs font-semibold text-slate-600">已結算</p>
-          </div>
-          <div className="rounded-md bg-slate-100 p-3 text-center">
-            <p className="text-2xl font-black text-slate-700">{stats.counts.closed}</p>
-            <p className="mt-1 text-xs font-semibold text-slate-600">已關帳</p>
+          <div className="rounded-md bg-[var(--success-bg)] p-4">
+            <p className="text-xs font-semibold text-slate-600">總訂單筆數</p>
+            <p className="mt-1 text-2xl font-black text-[var(--success-fg)]">{stats.totalOrders}</p>
           </div>
         </div>
 
@@ -193,9 +195,9 @@ export default function BillingDashboard({ statements, vendors }) {
                 <th className="py-3 pr-3">帳單編號</th>
                 <th className="py-3 pr-3">商家</th>
                 <th className="py-3 pr-3">結算期間</th>
+                <th className="py-3 pr-3 text-center">訂單筆數</th>
                 <th className="py-3 pr-3 text-right">總金額</th>
-                <th className="py-3 pr-3">狀態</th>
-                <th className="py-3 pr-3">建立日期</th>
+                <th className="py-3 pr-3">同步時間</th>
                 <th className="py-3 pr-3 text-right">操作</th>
               </tr>
             </thead>
@@ -207,26 +209,28 @@ export default function BillingDashboard({ statements, vendors }) {
                   </td>
                 </tr>
               ) : filtered.map((s) => {
-                const meta = STATUS_META[s.status] || { label: s.status, className: "bg-slate-100 text-slate-600" };
+                const period = s.statement_period || s.period || "—";
+                const orderCount = Number(s.order_count || 0);
+                const vendorName = vendorLookup[s.vendor_id] || `未知商家 (${String(s.vendor_id).slice(0, 12)}...)`;
                 return (
                   <tr key={s.id} className="hover:bg-[var(--surface-muted)]">
                     <td className="py-3 pr-3 font-mono text-xs text-slate-500">#{s.id}</td>
-                    <td className="py-3 pr-3 font-semibold text-slate-900">
-                      {vendorById[s.vendor_id] || `(${s.vendor_id})`}
+                    <td className="py-3 pr-3 font-semibold text-slate-900">{vendorName}</td>
+                    <td className="py-3 pr-3 text-slate-700">{period}</td>
+                    <td className="py-3 pr-3 text-center">
+                      <span className="inline-block rounded-md bg-[var(--navy-50)] px-2 py-0.5 text-xs font-bold text-[var(--navy-700)]">
+                        {orderCount}
+                      </span>
                     </td>
-                    <td className="py-3 pr-3 text-slate-700">{s.period || "—"}</td>
                     <td className="py-3 pr-3 text-right font-black text-[var(--admin-coffee-700)]">
                       {formatCurrency(s.total_amount)}
                     </td>
-                    <td className="py-3 pr-3">
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${meta.className}`}>
-                        {meta.label}
-                      </span>
+                    <td className="py-3 pr-3 text-xs text-slate-500">
+                      {formatDateTime(s.synced_at || s.created_at)}
                     </td>
-                    <td className="py-3 pr-3 text-slate-500">{formatDate(s.created_at)}</td>
                     <td className="py-3 pr-3 text-right">
                       <button
-                        onClick={() => deleteStatement(s.id, `${vendorById[s.vendor_id] || s.vendor_id} - ${s.period}`)}
+                        onClick={() => deleteStatement(s.id, `${vendorName} - ${period}`)}
                         className="rounded-md border border-[var(--error-fg)]/30 px-3 py-1 text-xs font-bold text-[var(--error-fg)] transition hover:bg-[var(--error-fg)] hover:text-white"
                       >
                         刪除
@@ -253,21 +257,37 @@ function CreateStatementModal({ vendors, onClose }) {
   const [period, setPeriod] = useState(months[0]?.value || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [result, setResult] = useState(null);
 
   async function submit(e) {
     e.preventDefault();
     setSaving(true);
     setError("");
+    setResult(null);
     try {
+      // 找到選中商家的 userId (integer)，這是 billing 服務需要的
+      const vendor = vendors.find((v) => v.id === vendorId);
+      const vendorUserId = vendor?.userId ?? vendor?.user_id;
+      if (!vendorUserId) {
+        throw new Error("這家商家沒有 user_id，無法結算（可能不是經由 IAM 建立的）");
+      }
+
       const res = await fetch("/api/admin/statements", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vendor_id: vendorId, statement_period: period }),
+        body: JSON.stringify({
+          vendor_id: vendorUserId,            // 傳 user_id (integer) 給 billing
+          statement_period: period,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || data.error || "建立失敗");
-      onClose();
-      router.refresh();
+      setResult(data);
+      // 1.5 秒後自動關閉並 refresh
+      setTimeout(() => {
+        onClose();
+        router.refresh();
+      }, 1500);
     } catch (err) {
       setError(err.message || "建立失敗");
     } finally {
@@ -290,6 +310,12 @@ function CreateStatementModal({ vendors, onClose }) {
         {error && (
           <div className="mb-4 rounded-md bg-[var(--error-bg)] px-3 py-2 text-sm font-medium text-[var(--error-fg)]">
             {error}
+          </div>
+        )}
+
+        {result && (
+          <div className="mb-4 rounded-md bg-[var(--success-bg)] px-3 py-2 text-sm font-medium text-[var(--success-fg)]">
+            ✓ 帳單建立成功！共 {result.order_count} 筆訂單，總金額 NT$ {Number(result.total_amount || 0).toLocaleString()}
           </div>
         )}
 
@@ -336,10 +362,10 @@ function CreateStatementModal({ vendors, onClose }) {
             </button>
             <button
               type="submit"
-              disabled={saving || !vendorId}
+              disabled={saving || !vendorId || !!result}
               className="flex-1 rounded-md bg-[var(--admin-coffee-600)] py-2.5 text-sm font-bold text-white transition hover:bg-[var(--admin-coffee-700)] disabled:opacity-50"
             >
-              {saving ? "計算中..." : "建立"}
+              {saving ? "計算中..." : result ? "✓ 完成" : "建立"}
             </button>
           </div>
         </form>

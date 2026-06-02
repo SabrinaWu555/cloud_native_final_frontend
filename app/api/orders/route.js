@@ -118,10 +118,7 @@ export async function POST(request) {
         token,
         method: "POST",
         body: {
-          vendor_id: payload.vendor_id || payload.vendorId,
           menu_id: item.menu_id,
-          menu_name: item.name,
-          price: Number(item.price),
           quantity: Number(item.quantity),
           pickup_date: payload.target_date || payload.targetDate,
         },

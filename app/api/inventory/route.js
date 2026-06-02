@@ -1,4 +1,4 @@
-// app/api/inventory/route.js — 查多個菜單在某日的庫存
+// app/api/inventory/route.js
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { COOKIE_NAME, SERVICES, apiFetch } from "@/lib/api";
@@ -11,7 +11,6 @@ export async function POST(request) {
   }
   const token = (await cookies()).get(COOKIE_NAME)?.value;
 
-  // 平行查每個 menu 的庫存
   const results = await Promise.all(
     menuIds.map(async (menuId) => {
       try {
@@ -21,8 +20,13 @@ export async function POST(request) {
         );
         if (!res.ok) return [menuId, null];
         const data = await res.json();
-        // 後端回 { remaining: N } 或類似格式，看後端怎麼回
-        return [menuId, data.remaining ?? data.quantity ?? null];
+        // ★ debug：第一筆印出來看格式
+        if (menuId === menuIds[0]) {
+          console.log("inventory 後端回的格式:", JSON.stringify(data));
+        }
+        // 兼容多種可能欄位名
+        const remaining = data.remaining ?? data.quantity ?? data.remaining_quantity ?? data;
+        return [menuId, typeof remaining === "number" ? remaining : null];
       } catch {
         return [menuId, null];
       }

@@ -1,4 +1,3 @@
-// app/(main)/notifications/[id]/page.js — 通知明細（開啟即標為已讀）
 import Link from "next/link";
 import { cookies } from "next/headers";
 import {
@@ -9,7 +8,8 @@ import { getMockNotification, markMockNotificationRead } from "@/lib/mockData";
 
 export const dynamic = "force-dynamic";
 
-const TYPE_LABELS = { pickup: "領餐通知", cancel: "取消通知", today: "今日訂單提醒" };
+// [修改點]：同步修改為只有這兩種
+const TYPE_LABELS = { create: "訂單建立", cancel: "訂單取消" };
 
 async function loadAndRead(id) {
   if (USE_LOCAL_MOCKS || !SERVICES.notification) {
@@ -20,16 +20,23 @@ async function loadAndRead(id) {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
   const userId = cookieStore.get("userId")?.value;
+  
   try {
     const path = userId ? withPathParams(ENDPOINTS.notificationsByUser, { id: userId }) : ENDPOINTS.notifications;
     const res = await apiFetch(serviceUrl(SERVICES.notification, path), { token });
     const data = await jsonOrEmpty(res);
     const list = Array.isArray(data) ? data : data.notifications || [];
     const found = list.find((n) => String(n.id) === String(id)) || null;
+    
     if (userId) {
+      // [修改點]：完全符合後端要求的 payload 規格 { ids: [1, 2] }
       await apiFetch(
         serviceUrl(SERVICES.notification, withPathParams(ENDPOINTS.notificationMarkRead, { id: userId })),
-        { token, method: "PATCH", body: { notificationId: id, notification_id: id, read: true } }
+        { 
+          token, 
+          method: "PATCH", 
+          body: { ids: [Number(id)] } 
+        }
       ).catch(() => {});
     }
     return found || getMockNotification(id);
@@ -49,27 +56,45 @@ export default async function NotificationDetailPage({ params }) {
 
   if (!item) {
     return (
-      <div className="surface-panel mx-auto max-w-[1440px] rounded-lg p-8 text-center">
-        <p className="text-sm text-slate-500">找不到這則通知。</p>
-        <Link href="/notifications" className="mt-3 inline-block text-sm font-bold text-[var(--navy-600)]">← 回通知中心</Link>
+      <div className="surface-panel mx-auto max-w-[1440px] rounded-lg border border-slate-100 p-8 text-center shadow-sm">
+        <p className="text-sm text-slate-500">找不到這則通知，可能已被刪除或權限不足。</p>
+        <Link href="/notifications" className="mt-4 inline-block rounded-md bg-[var(--navy-50)] px-4 py-2 text-sm font-bold text-[var(--navy-600)] transition hover:bg-[var(--navy-100)]">← 返回通知中心</Link>
       </div>
     );
   }
 
+  // 依照 type 決定標籤顏色
+  const isCancel = item.type === "cancel";
+  const tagColors = isCancel 
+    ? "bg-[var(--error-bg)] text-[var(--error-fg)]" 
+    : "bg-[var(--teal-50)] text-[var(--teal-600)]";
+
   return (
     <div className="mx-auto w-full max-w-[820px] space-y-5">
-      <Link href="/notifications" className="inline-flex items-center gap-1 text-sm font-bold text-slate-500 transition hover:text-[var(--navy-600)]">← 回通知中心</Link>
+      <Link href="/notifications" className="inline-flex items-center gap-1 text-sm font-bold text-slate-500 transition hover:text-[var(--navy-600)]">
+        ← 返回通知中心
+      </Link>
 
-      <article className="surface-panel rounded-lg p-6 sm:p-8">
-        <span className="inline-flex rounded-full bg-[var(--navy-50)] px-3 py-1 text-xs font-bold text-[var(--navy-600)]">
-          {TYPE_LABELS[item.type] || "系統通知"}
-        </span>
-        <h1 className="mt-4 text-2xl font-black text-[var(--navy-900)]">{item.title}</h1>
-        <p className="mt-1 text-xs font-semibold text-slate-400">{formatDateTime(item.created_at)}</p>
-        <div className="mt-5 border-t border-slate-100 pt-5">
-          <p className="text-base leading-7 text-slate-700">{item.message}</p>
+      <article className="surface-panel rounded-lg border border-slate-100 p-6 shadow-sm sm:p-10">
+        <div className="flex items-center gap-3">
+          <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${tagColors}`}>
+            {TYPE_LABELS[item.type] || "系統通知"}
+          </span>
+          <p className="text-xs font-semibold text-slate-400">{formatDateTime(item.created_at)}</p>
         </div>
-        <p className="mt-6 rounded-md bg-[var(--success-bg)] px-3 py-2 text-sm font-medium text-[var(--success-fg)]">這則通知已標記為已讀。</p>
+        
+        <h1 className="mt-5 text-2xl font-black text-[var(--navy-900)] sm:text-3xl">{item.title}</h1>
+        
+        <div className="mt-6 border-t border-slate-100 pt-6">
+          <p className="whitespace-pre-wrap text-base leading-relaxed text-slate-700">{item.message}</p>
+        </div>
+        
+        <div className="mt-8 flex items-center gap-2">
+          <svg className="h-4 w-4 text-[var(--success-fg)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          <p className="text-sm font-medium text-slate-500">此通知已標記為已讀</p>
+        </div>
       </article>
     </div>
   );

@@ -3,19 +3,24 @@ import { NextResponse } from "next/server";
 import { COOKIE_NAME, ENDPOINTS, SERVICES, apiFetch, jsonOrEmpty, serviceUrl } from "@/lib/api";
 import { MOCK_STATEMENTS } from "@/lib/mockData";
 
+
+
 export async function GET() {
   const token = (await cookies()).get(COOKIE_NAME)?.value;
-
   try {
     const res = await apiFetch(serviceUrl(SERVICES.billing, ENDPOINTS.billingStatements), {
       token,
     });
+
     const data = await jsonOrEmpty(res);
     return NextResponse.json(data, { status: res.status });
   } catch {
     return NextResponse.json(MOCK_STATEMENTS);
   }
+
 }
+
+
 
 export async function POST(request) {
   const payload = await request.json().catch(() => ({}));
@@ -27,6 +32,7 @@ export async function POST(request) {
       method: "POST",
       body: payload,
     });
+
     const data = await jsonOrEmpty(res);
     return NextResponse.json(data, { status: res.status });
   } catch {
@@ -41,3 +47,4 @@ export async function POST(request) {
     );
   }
 }
+
