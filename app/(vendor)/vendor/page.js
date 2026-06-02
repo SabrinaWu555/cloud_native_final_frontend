@@ -172,7 +172,7 @@ async function getMenus() {
 export default async function VendorPage() {
   const [orders, menus, revenue] = await Promise.all([getOrders("upcoming"), getMenus(), getBillingRevenue()]);
   const activeOrders = orders.filter((order) => !["completed", "cancelled"].includes(order.status));
-  const availableMenus = menus.filter((menu) => Number(menu.effectiveDailyLimit ?? 0) > 0);
+  const availableMenus = menus.filter((menu) => Number(menu.effectiveDailyLimit ?? 0) > 0 && menu.isActive);
 
   return (
     <div className="w-full space-y-6">
@@ -218,7 +218,7 @@ export default async function VendorPage() {
             </Link>
           </div>
           <div className="grid gap-3">
-            {menus.map((menu) => (
+            {availableMenus.map((menu) => (
               <article key={menu.id} className="rounded-md border border-[var(--line)] bg-white p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>

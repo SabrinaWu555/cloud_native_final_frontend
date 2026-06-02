@@ -22,8 +22,8 @@ async function getMenus() {
 export default async function VendorMenusPage() {
   const menus = await getMenus();
   console.log("Raw menus data:", menus);
-  const available = menus.filter((m) => Number(m.effectiveDailyLimit ?? 0) > 0);
-  const soldOut   = menus.filter((m) => Number(m.effectiveDailyLimit ?? 0) === 0);
+  const available = menus.filter((m) => Number(m.effectiveDailyLimit ?? 0) > 0 && m.isActive);
+  const soldOut   = menus.filter((m) => Number(m.effectiveDailyLimit ?? 0) === 0 || !m.isActive);
 
   console.log("Fetched menus:", menus);
 
@@ -110,12 +110,12 @@ function MenuCard({ menu, soldOut = false }) {
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--navy-50)]">
         <div
           className={`h-full rounded-full ${soldOut ? "bg-slate-300" : "bg-[var(--teal-400)]"}`}
-          style={{ width: `${Math.min(100, Number(menu.effectiveDailyLimit ?? 0) * 5)}%` }}
+          style={{ width: soldOut ? "0%" : `${Math.min(100, Number(menu.effectiveDailyLimit ?? 0) * 5)}%` }}
         />
       </div>
       <div className="mt-2 flex items-center justify-between">
         <p className="text-xs font-semibold text-slate-500">
-          剩餘 {menu.effectiveDailyLimit ?? 0} 份
+          {!menu.isActive ? "已停用" : `剩餘 ${menu.effectiveDailyLimit ?? 0} 份`}
         </p>
         {/* 編輯按鈕 — 之後接 /vendor/menus/[id]/edit */}
         <Link
