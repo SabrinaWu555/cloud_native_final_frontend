@@ -10,6 +10,7 @@ import {
   serviceUrl 
 } from "@/lib/api";
 import { MOCK_MENUS, MOCK_ORDERS } from "@/lib/mockData";
+import { use } from "react";
 
 async function resolveVendorId(token) {
   // Try JWT payload first
@@ -128,6 +129,30 @@ function calculateDates(rangeParam, fromParam, toParam) {
   return { from: "", to: "" };
 }
 
+async function getBillingRevenue() {
+  const token = (await cookies()).get(COOKIE_NAME)?.value;
+  if (!token || !SERVICES.vendor || !SERVICES.billing) return 0;
+
+  try {
+    const meRes = await apiFetch(serviceUrl(SERVICES.vendor, ENDPOINTS.vendorMe), { token });
+    if (!meRes.ok) return 0;
+    const me = await meRes.json();
+    const vendorId = me.id;
+    if (!vendorId) return 0;
+
+    const statementsRes = await apiFetch(
+      serviceUrl(SERVICES.billing, `/billing/billing/statements/user/${vendorId}`),
+      { token },
+    );
+    if (!statementsRes.ok) return 0;
+    const statements = await jsonOrEmpty(statementsRes);
+    const list = Array.isArray(statements) ? statements : [];
+    return list.reduce((sum, s) => sum + Number(s.total_amount ?? 0), 0);
+  } catch {
+    return 0;
+  }
+}
+
 async function getMenus() {
   if (!SERVICES.vendor) return MOCK_MENUS;
 
@@ -145,11 +170,9 @@ async function getMenus() {
 }
 
 export default async function VendorPage() {
-  const [orders, menus] = await Promise.all([getOrders("upcoming"), getMenus()]);
-  // console.log("Fetched orders:", orders);
+  const [orders, menus, revenue] = await Promise.all([getOrders("upcoming"), getMenus(), getBillingRevenue()]);
   const activeOrders = orders.filter((order) => !["completed", "cancelled"].includes(order.status));
   const availableMenus = menus.filter((menu) => Number(menu.effectiveDailyLimit ?? 0) > 0);
-  const revenue = orders.reduce((sum, order) => sum + Number(order.total_amount ?? order.price ?? 0), 0);
 
   return (
     <div className="w-full space-y-6">
@@ -177,7 +200,7 @@ export default async function VendorPage() {
       <section className="grid gap-4 md:grid-cols-3">
         <Stat label="待處理訂單" value={activeOrders.length} tone="navy" href="/vendor/orders" />
         <Stat label="供應中餐點" value={availableMenus.length} tone="teal" href="/vendor/menus" />
-        <Stat label="今日金額" value={`$${revenue}`} tone="amber" href="/vendor/billing" />
+        <Stat label="本月總營收" value={`$${revenue}`} tone="amber" />
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
