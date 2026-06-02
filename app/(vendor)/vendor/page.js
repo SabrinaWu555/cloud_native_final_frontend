@@ -166,12 +166,6 @@ export default async function VendorPage() {
         
         <div className="flex flex-wrap items-center gap-3">
           <Link
-            href="/vendor/notifications"
-            className="inline-flex min-h-11 items-center justify-center rounded-md border border-[var(--navy-100)] bg-white px-5 text-sm font-bold text-[var(--navy-600)] transition hover:bg-[var(--surface-muted)]"
-          >
-            通知中心
-          </Link>
-          <Link
             href="/vendor/menus/new"
             className="inline-flex min-h-11 items-center justify-center rounded-md bg-[var(--navy-600)] px-5 text-sm font-bold text-white transition hover:bg-[var(--navy-800)]"
           >

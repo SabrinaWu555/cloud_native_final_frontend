@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 
 const NAV_ITEMS = [
   { href: "/vendor", label: "商家工作台" },
+  { href: "/vendor/menus", label: "菜單總覽" },
+  { href: "/vendor/orders", label: "訂單總覽" },
 ];
 
 export default function VendorNavbar() {
@@ -16,7 +18,7 @@ export default function VendorNavbar() {
     fetch("/api/vendor/me")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => data && setVendor(data))
-      .catch((err) => console.error("Failed to fetch vendor info:", err));
+      .catch(() => {});
   }, []);
 
   async function logout() {
@@ -25,7 +27,6 @@ export default function VendorNavbar() {
     router.refresh();
   }
 
-  console.log("Vendor info:", vendor);
   const displayName = vendor?.name || "商家";
   const avatarChar = displayName.charAt(0).toUpperCase();
 
@@ -34,9 +35,7 @@ export default function VendorNavbar() {
       <div className="flex min-h-16 w-full flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
         <div className="flex items-center justify-between gap-4">
           <Link href="/vendor" className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-md bg-white text-xs font-black tracking-tight text-[var(--vendor-gray-700)]">
-              TSMC
-            </span>
+            <span className="flex h-10 w-10 items-center justify-center rounded-md bg-white text-xs font-black tracking-tight text-[var(--vendor-gray-700)]">TSMC</span>
             <span>
               <span className="block text-base font-bold leading-tight">企業訂餐平台</span>
               <span className="block text-xs font-medium text-[var(--vendor-gray-100)]">商家 · Vendor</span>
@@ -47,7 +46,10 @@ export default function VendorNavbar() {
         <div className="flex items-center justify-between gap-3">
           <nav className="flex flex-wrap items-center gap-1">
             {NAV_ITEMS.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(item.href + "/");
+              const active =
+                item.href === "/vendor"
+                  ? pathname === "/vendor"
+                  : pathname.startsWith(item.href);
               return (
                 <Link
                   key={item.href}
@@ -74,7 +76,7 @@ export default function VendorNavbar() {
             </div>
             <button
               onClick={logout}
-              className="rounded-md border border-white/30 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+              className="rounded-md border border-white/20 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
             >
               登出
             </button>
