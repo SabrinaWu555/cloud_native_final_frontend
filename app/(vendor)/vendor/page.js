@@ -1,32 +1,131 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
-import { COOKIE_NAME, ENDPOINTS, SERVICES, apiFetch, jsonOrEmpty, serviceUrl } from "@/lib/api";
+import { 
+  COOKIE_NAME, 
+  ENDPOINTS, 
+  SERVICES, 
+  USE_LOCAL_MOCKS,
+  apiFetch, 
+  jsonOrEmpty, 
+  serviceUrl 
+} from "@/lib/api";
 import { MOCK_MENUS, MOCK_ORDERS } from "@/lib/mockData";
 
-async function getOrders() {
-  if (!SERVICES.order) {
-    console.warn("services.order is not configured, using mock orders");
+async function resolveVendorId(token) {
+  // Try JWT payload first
+  try {
+    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString());
+    const id = payload.vendorId || payload.vendor_id || payload.merchantId || "";
+    if (id) return String(id);
+  } catch {}
+
+  // Fallback: call /vendors/me
+  if (SERVICES.vendor) {
+    try {
+      const res = await apiFetch(serviceUrl(SERVICES.vendor, ENDPOINTS.vendorMe ?? "/api/v1/vendors/me"), { token });
+      if (res.ok) {
+        const d = await res.json();
+        const id = d.id || d.vendorId || d.data?.id || "";
+        if (id) return String(id);
+      }
+    } catch {}
+  }
+
+  return "";
+}
+
+async function getOrders(rangeParam, fromParam, toParam) {
+  if (USE_LOCAL_MOCKS) {
+    console.warn("Using local mock orders data. To fetch from backend, set USE_LOCAL_MOCKS=false in environment variables.");
     return MOCK_ORDERS;
   }
+
   const token = (await cookies()).get(COOKIE_NAME)?.value;
+  if (!SERVICES.order || !token) return MOCK_ORDERS;
 
   try {
-    const url = serviceUrl(SERVICES.order, ENDPOINTS.vendorOrders);
-    console.log("Asking for vendor orders:", url);
-
-    const res = await apiFetch(url, { token });
-    console.log(`Vendor Orders status: ${res.status}`);
-
-    if (!res.ok) {
-      console.error(`Vendor Orders failed with status: ${res.status}`);
+    const vendorId = (await cookies()).get("userId")?.value;
+    console.log("Resolved vendor ID:", vendorId);
+    if (!vendorId) {
+      console.error("getOrders: could not resolve vendor ID");
       return MOCK_ORDERS;
     }
+
+    const basePath = `/vendor/orders/vendor/${vendorId}`;
+    const base = serviceUrl(SERVICES.order, basePath);
+
+    const { from, to } = calculateDates(rangeParam, fromParam, toParam);
+    const qs = new URLSearchParams();
+    if (from) qs.set("from", from);
+    if (to)   qs.set("to", to);
+    
+    const url = qs.size ? `${base}?${qs.toString()}` : base;
+
+    console.log("Sending request to backend URL:", url);
+
+    const res = await apiFetch(url, { token });
+    if (!res.ok) {
+      console.error(`Backend error: ${res.status}`);
+      return MOCK_ORDERS;
+    }
+
     const data = await jsonOrEmpty(res);
-    return Array.isArray(data) ? data : data.orders || MOCK_ORDERS;
-  } catch (err) {
-    console.error("Network error while fetching vendor orders", err.message);
+    const list = Array.isArray(data) ? data : data.orders ?? [];
+
+    return list.map((o) => {
+      const price = Number(o.price ?? o.price_snapshot ?? 0);
+      const qty   = Number(o.quantity ?? 1);
+      return {
+        id:            String(o.id).startsWith("ORD-") ? o.id : `ORD-${o.id}`,
+        raw_id:        o.raw_id ?? o.id,
+        employee_name: o.employee_name ?? o.user_name ?? (o.user_id ? `員工 #${o.user_id}` : "未知員工"),
+        menu_name:     o.menu_name ?? o.items?.[0]?.name ?? "未知餐點",
+        status:        o.status ?? "pending",
+        order_date:    (o.order_date ?? o.created_at)?.slice(0, 10) ?? null,
+        pickup_date:   o.pickup_date ?? o.target_date ?? null,
+        quantity:      qty,
+        price,
+        total_amount:  Number(o.total_amount ?? o.total_price ?? price * qty),
+        cancel_reason: o.cancel_reason ?? "",
+      };
+    });
+  } catch (error) {
+    console.error("取得訂單時發生嚴重例外錯誤:", error);
     return MOCK_ORDERS;
   }
+}
+
+function calculateDates(rangeParam, fromParam, toParam) {
+  if (fromParam && toParam) {
+    return { from: fromParam, to: toParam };
+  }
+
+  const today = new Date();
+  const tzOffset = today.getTimezoneOffset() * 60000;
+  const localISODate = (date) => new Date(date.getTime() - tzOffset).toISOString().split("T")[0];
+
+  if (rangeParam === "today") {
+    const dateStr = localISODate(today);
+    return { from: dateStr, to: dateStr };
+  }
+
+  if (rangeParam === "upcoming") {
+    const tomorrow = new Date();
+    tomorrow.setDate(today.getDate() + 1);
+
+    const endDay = new Date();
+    endDay.setDate(today.getDate() + 7);
+
+    return { from: localISODate(tomorrow), to: localISODate(endDay) };
+  }
+
+  if (rangeParam === "history") {
+    const past = new Date();
+    past.setMonth(today.getMonth() - 3);
+    return { from: localISODate(past), to: localISODate(today) };
+  }
+
+  return { from: "", to: "" };
 }
 
 async function getMenus() {
@@ -35,7 +134,7 @@ async function getMenus() {
   const token = (await cookies()).get(COOKIE_NAME)?.value;
 
   try {
-    const res = await apiFetch(serviceUrl(SERVICES.vendor, ENDPOINTS.menus), { token });
+    const res = await apiFetch(serviceUrl(SERVICES.vendor, ENDPOINTS.vendorMeMenus), { token });
     if (!res.ok) return MOCK_MENUS;
     const data = await jsonOrEmpty(res);
     return Array.isArray(data) ? data : data.menus || MOCK_MENUS;
@@ -43,12 +142,13 @@ async function getMenus() {
     console.error("Network error while fetching vendor menus", err.message);
     return MOCK_MENUS;
   }
-  }
+}
 
 export default async function VendorPage() {
-  const [orders, menus] = await Promise.all([getOrders(), getMenus()]);
+  const [orders, menus] = await Promise.all([getOrders("upcoming"), getMenus()]);
+  // console.log("Fetched orders:", orders);
   const activeOrders = orders.filter((order) => !["completed", "cancelled"].includes(order.status));
-  const availableMenus = menus.filter((menu) => Number(menu.daily_limit ?? 0) > 0);
+  const availableMenus = menus.filter((menu) => Number(menu.effectiveDailyLimit ?? 0) > 0);
   const revenue = orders.reduce((sum, order) => sum + Number(order.total_amount ?? order.price ?? 0), 0);
 
   return (
@@ -80,16 +180,13 @@ export default async function VendorPage() {
         </div>
       </section>
 
-      {/* 三欄統計：整合舊版可點擊跳轉專屬路徑功能 */}
       <section className="grid gap-4 md:grid-cols-3">
         <Stat label="待處理訂單" value={activeOrders.length} tone="navy" href="/vendor/orders" />
         <Stat label="供應中餐點" value={availableMenus.length} tone="teal" href="/vendor/menus" />
         <Stat label="今日金額" value={`$${revenue}`} tone="amber" href="/vendor/billing" />
       </section>
 
-      {/* 主內容：菜單 + 訂單 */}
       <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        {/* 菜單列表：加入「管理菜單 →」跳轉連結 */}
         <div className="surface-panel rounded-lg p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
@@ -116,18 +213,18 @@ export default async function VendorPage() {
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--navy-50)]">
                   <div
                     className="h-full rounded-full bg-[var(--teal-400)]"
-                    style={{ width: `${Math.min(100, Number(menu.daily_limit ?? 0) * 5)}%` }}
+                    style={{ width: `${Math.min(100, Number(menu.effectiveDailyLimit ?? 0) * 5)}%` }}
                   />
                 </div>
                 <p className="mt-2 text-xs font-semibold text-slate-500">
-                  剩餘 {menu.daily_limit ?? 0} 份
+                  剩餘 {menu.effectiveDailyLimit ?? 0} 份
                 </p>
               </article>
             ))}
           </div>
         </div>
 
-        {/* 訂單表格：整合舊版完整欄位（訂餐時間/出餐時間）、訂單詳細頁跳轉、精緻化狀態色標 */}
+        {/* 訂單表格區塊（已修正壓縮與時間空白問題） */}
         <div className="surface-panel overflow-hidden rounded-lg">
           <div className="flex items-center justify-between border-b border-[var(--line)] p-5">
             <div>
@@ -142,39 +239,41 @@ export default async function VendorPage() {
             </Link>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
+            {/* 加上 table-fixed 嚴格控制各欄位比例 */}
+            <table className="min-w-full divide-y divide-slate-100 text-left text-sm table-fixed">
               <thead className="bg-[var(--navy-50)] text-xs font-bold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-5 py-3">訂單編號</th>
-                  <th className="px-5 py-3">餐點名稱</th>
-                  <th className="px-5 py-3">訂餐時間</th>
-                  <th className="px-5 py-3">出餐時間</th>
-                  <th className="px-5 py-3">狀態</th>
+                  <th className="px-5 py-3 w-[130px]">訂單編號</th>
+                  <th className="px-5 py-3 w-[120px]">餐點名稱</th>
+                  <th className="px-5 py-3 w-[120px]">訂餐時間</th>
+                  <th className="px-5 py-3 w-[120px]">出餐時間</th>
+                  <th className="px-5 py-3 w-[100px]">狀態</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {orders.map((order) => (
                   <tr key={order.id} className="bg-white transition hover:bg-[var(--surface-muted)]">
+                    {/* 訂單編號：設定最大寬度並加上 truncate，滑鼠懸停顯示完整 ID */}
                     <td className="px-5 py-4">
                       <Link
-                        href={`/vendor/orders/${order.id}`}
-                        className="font-semibold text-[var(--navy-600)] hover:underline"
+                        href={`/vendor/orders/${order.raw_id}`}
+                        className="font-semibold text-[var(--navy-600)] hover:underline block truncate max-w-[100px]"
+                        title={order.id}
                       >
                         #{order.id}
                       </Link>
                     </td>
-                    <td className="px-5 py-4 text-slate-700">{order.menu_name ?? "-"}</td>
-                    <td className="px-5 py-4 text-slate-600">
-                      {order.created_at
-                        ? new Date(order.created_at).toLocaleString("zh-TW", {
-                            month: "2-digit",
-                            day: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })
-                        : "-"}
+                    <td className="px-5 py-4 text-slate-700 truncate" title={order.menu_name}>
+                      {order.menu_name ?? "-"}
                     </td>
-                    <td className="px-5 py-4 text-slate-600">{order.pickup_time || "-"}</td>
+                    {/* 修正：讀取 map 整理後的 order_date */}
+                    <td className="px-5 py-4 text-slate-600 whitespace-nowrap">
+                      {order.order_date ?? "-"}
+                    </td>
+                    {/* 修正：讀取 map 整理後的 pickup_date */}
+                    <td className="px-5 py-4 text-slate-600 whitespace-nowrap">
+                      {order.pickup_date ?? "-"}
+                    </td>
                     <td className="px-5 py-4">
                       <Status value={order.status} />
                     </td>
@@ -224,13 +323,14 @@ function Status({ value }) {
     ready: { label: "可領取", color: "bg-green-50 text-green-600" },
     completed: { label: "已完成", color: "bg-slate-100 text-slate-500" },
     cancelled: { label: "已取消", color: "bg-red-50 text-red-400" },
+    confirmed: { label: "已確認", color: "bg-blue-50 text-blue-600" },
   };
 
   const { label = value ?? "未知", color = "bg-[var(--navy-50)] text-[var(--navy-600)]" } =
     map[value] ?? {};
 
   return (
-    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${color}`}>
+    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${color} whitespace-nowrap`}>
       {label}
     </span>
   );

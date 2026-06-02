@@ -10,13 +10,13 @@ const NAV_ITEMS = [
 export default function VendorNavbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState(null);
+  const [vendor, setVendor] = useState(null);
 
   useEffect(() => {
-    fetch("/api/auth/me")
+    fetch("/api/vendor/me")
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => data && setUser(data))
-      .catch(() => {});
+      .then((data) => data && setVendor(data))
+      .catch((err) => console.error("Failed to fetch vendor info:", err));
   }, []);
 
   async function logout() {
@@ -25,7 +25,8 @@ export default function VendorNavbar() {
     router.refresh();
   }
 
-  const displayName = user?.full_name || user?.email?.split("@")[0] || "商家";
+  console.log("Vendor info:", vendor);
+  const displayName = vendor?.name || "商家";
   const avatarChar = displayName.charAt(0).toUpperCase();
 
   return (

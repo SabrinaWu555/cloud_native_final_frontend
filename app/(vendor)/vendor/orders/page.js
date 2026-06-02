@@ -1,4 +1,4 @@
-// app/(main)/vendor/orders/page.js — 商家訂單列表
+// app/(vendor)/vendor/orders/page.js
 import Link from "next/link";
 import { cookies } from "next/headers";
 import {
@@ -12,7 +12,6 @@ import {
 } from "@/lib/api";
 import { MOCK_ORDERS } from "@/lib/mockData";
 
-// Order Service 的實際狀態值
 const STATUS_META = {
   pending:   { label: "待確認", className: "bg-yellow-50 text-yellow-600" },
   confirmed: { label: "已確認", className: "bg-[var(--navy-50)] text-[var(--navy-600)]" },
@@ -20,47 +19,96 @@ const STATUS_META = {
   cancelled: { label: "已取消", className: "bg-[var(--error-bg)] text-[var(--error-fg)]" },
 };
 
+// 輔助函式：將前端的 range (today, upcoming, history) 轉換成後端需要的 from 和 to 日期格式
+function calculateDates(rangeParam, fromParam, toParam) {
+  // 如果 URL 已經帶有明確的 from/to，優先使用
+  if (fromParam && toParam) {
+    return { from: fromParam, to: toParam };
+  }
+
+  const today = new Date();
+  const tzOffset = today.getTimezoneOffset() * 60000; // 處理時區
+  const localISODate = (date) => new Date(date.getTime() - tzOffset).toISOString().split("T")[0];
+
+  if (rangeParam === "today") {
+    const dateStr = localISODate(today);
+    return { from: dateStr, to: dateStr };
+  }
+
+  if (rangeParam === "upcoming") {
+    const nextWeek = new Date();
+    nextWeek.setDate(today.getDate() + 7);
+    return { from: localISODate(today), to: localISODate(nextWeek) };
+  }
+
+  if (rangeParam === "history") {
+    const past = new Date();
+    past.setMonth(today.getMonth() - 3); // 預設拉過去 3 個月的歷史紀錄
+    return { from: localISODate(past), to: localISODate(today) };
+  }
+
+  return { from: "", to: "" };
+}
+
 async function getOrders(rangeParam, fromParam, toParam) {
-  if (USE_LOCAL_MOCKS) return MOCK_ORDERS;
+  if (USE_LOCAL_MOCKS) {
+    console.warn("Using local mock orders data. To fetch from backend, set USE_LOCAL_MOCKS=false in environment variables.");
+    return MOCK_ORDERS;
+  }
 
   const token = (await cookies()).get(COOKIE_NAME)?.value;
   if (!SERVICES.order || !token) return MOCK_ORDERS;
 
   try {
-    // 商家專用 endpoint：GET /vendor/orders
-    // 支援 range=today|upcoming|history 或 from/to 自訂區間
-    const base = serviceUrl(SERVICES.order, ENDPOINTS.vendorOrders ?? "/vendor/orders");
-    const qs   = new URLSearchParams();
-    if (rangeParam) qs.set("range", rangeParam);
-    if (fromParam)  qs.set("from",  fromParam);
-    if (toParam)    qs.set("to",    toParam);
-    const url  = qs.size ? `${base}?${qs}` : base;
-    console.log("Fetching orders with URL:", url);
+    const vendorId = (await cookies()).get("userId")?.value;
+    console.log("Resolved vendor ID:", vendorId);
+    if (!vendorId) {
+      console.error("getOrders: could not resolve vendor ID");
+      return MOCK_ORDERS;
+    }
 
-    const res  = await apiFetch(url, { token });
-    console.log("Raw response: ${res.status} ${res.statusText}");
+    const basePath = `/vendor/orders/vendor/${vendorId}`;
+    const base = serviceUrl(SERVICES.order, basePath);
 
-    if (!res.ok) return MOCK_ORDERS;
+    const { from, to } = calculateDates(rangeParam, fromParam, toParam);
+    const qs = new URLSearchParams();
+    if (from) qs.set("from", from);
+    if (to)   qs.set("to", to);
+    
+    const url = qs.size ? `${base}?${qs.toString()}` : base;
+
+    console.log("Sending request to backend URL:", url);
+
+    const res = await apiFetch(url, { token });
+    if (!res.ok) {
+      console.error(`Backend error: ${res.status}`);
+      return MOCK_ORDERS;
+    }
+
     const data = await jsonOrEmpty(res);
-    console.log("Parsed data:", data);
-
     const list = Array.isArray(data) ? data : data.orders ?? [];
 
-    return list.map((o) => ({
-      id:            `ORD-${o.id}`,
-      raw_id:        o.id,
-      // Order Service 不一定直接給 employee_name，先 fallback 到 user_id
-      employee_name: o.employee_name ?? o.user_name ?? (o.user_id ? `員工 #${o.user_id}` : "—"),
-      menu_name:     o.menu_name  ?? "—",
-      status:        o.status,
-      order_date:    o.created_at?.slice(0, 10) ?? null,
-      pickup_date:   o.pickup_date ?? null,
-      quantity:      Number(o.quantity  ?? 1),
-      price:         Number(o.price     ?? 0),
-      total_amount:  Number(o.total_amount ?? 0) || Number(o.price ?? 0) * Number(o.quantity ?? 1),
-      cancel_reason: o.cancel_reason ?? "",
-    }));
-  } catch {
+    console.log("Backend response:", JSON.stringify(list[0], null, 2));
+
+    return list.map((o) => {
+      const price = Number(o.price ?? o.price_snapshot ?? 0);
+      const qty   = Number(o.quantity ?? 1);
+      return {
+        id:            String(o.id).startsWith("ORD-") ? o.id : `ORD-${o.id}`,
+        raw_id:        o.raw_id ?? o.id,
+        employee_name: o.employee_name ?? o.user_name ?? (o.user_id ? `員工 #${o.user_id}` : "未知員工"),
+        menu_name:     o.menu_name ?? o.items?.[0]?.name ?? "未知餐點",
+        status:        o.status ?? "pending",
+        order_date:    (o.order_date ?? o.created_at)?.slice(0, 10) ?? null,
+        pickup_date:   o.pickup_date ?? o.target_date ?? null,
+        quantity:      qty,
+        price,
+        total_amount:  Number(o.total_amount ?? o.total_price ?? price * qty),
+        cancel_reason: o.cancel_reason ?? "",
+      };
+    });
+  } catch (error) {
+    console.error("取得訂單時發生嚴重例外錯誤:", error);
     return MOCK_ORDERS;
   }
 }
@@ -73,19 +121,18 @@ function formatDate(dateStr) {
   if (!dateStr) return "-";
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return "-";
-  return new Intl.DateTimeFormat("zh-TW", {
-    month: "2-digit", day: "2-digit", weekday: "short",
-  }).format(d);
+  return new Intl.DateTimeFormat("zh-TW", { month: "2-digit", day: "2-digit", weekday: "short" }).format(d);
 }
 
 export default async function VendorOrdersPage({ searchParams }) {
-  const params     = await searchParams;
-  const status     = params?.status ?? "all";
-  const range      = params?.range  ?? "upcoming";   // 預設看「接下來」的訂單
-  const fromParam  = params?.from   ?? "";
-  const toParam    = params?.to     ?? "";
+  const params    = await searchParams;
+  const status    = params?.status ?? "all";
+  const range     = params?.range  ?? "upcoming";
+  const fromParam = params?.from   ?? "";
+  const toParam   = params?.to     ?? "";
 
   const orders   = await getOrders(range, fromParam, toParam);
+  console.log("Fetched orders:", orders);
   const filtered = status === "all" ? orders : orders.filter((o) => o.status === status);
 
   const counts = {
@@ -97,26 +144,18 @@ export default async function VendorOrdersPage({ searchParams }) {
 
   return (
     <div className="mx-auto w-full max-w-[1440px] space-y-6">
-
       {/* 標題 */}
       <section className="surface-panel rounded-lg px-4 py-5 sm:px-6 lg:px-8">
         <Link href="/vendor" className="text-xs font-semibold text-[var(--teal-600)] hover:underline">
           ← 返回工作台
         </Link>
-        <p className="mt-3 text-sm font-bold uppercase tracking-[0.18em] text-[var(--teal-600)]">
-          Order Management
-        </p>
+        <p className="mt-3 text-sm font-bold uppercase tracking-[0.18em] text-[var(--teal-600)]">Order Management</p>
         <div className="mt-2 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-3xl font-black text-[var(--navy-900)]">所有訂單</h1>
-            <p className="mt-2 text-sm text-slate-600">
-              查看員工的訂餐紀錄，點進明細可查看完整資訊。
-            </p>
+            <p className="mt-2 text-sm text-slate-600">查看員工的訂餐紀錄，點進明細可查看完整資訊。</p>
           </div>
-
-          {/* 篩選列 */}
           <form className="flex flex-wrap gap-2">
-            {/* 時間範圍 */}
             <select
               name="range"
               defaultValue={range}
@@ -126,7 +165,6 @@ export default async function VendorOrdersPage({ searchParams }) {
               <option value="upcoming">即將到來</option>
               <option value="history">歷史</option>
             </select>
-            {/* 訂單狀態 */}
             <select
               name="status"
               defaultValue={status}
@@ -138,9 +176,7 @@ export default async function VendorOrdersPage({ searchParams }) {
               <option value="completed">已完成</option>
               <option value="cancelled">已取消</option>
             </select>
-            <button className="rounded-md bg-[var(--navy-600)] px-4 text-sm font-bold text-white hover:bg-[var(--navy-800)]">
-              篩選
-            </button>
+            <button className="rounded-md bg-[var(--navy-600)] px-4 text-sm font-bold text-white hover:bg-[var(--navy-800)]">篩選</button>
           </form>
         </div>
       </section>
@@ -162,7 +198,6 @@ export default async function VendorOrdersPage({ searchParams }) {
 
       {/* 訂單列表 */}
       <section className="surface-panel overflow-hidden rounded-lg">
-
         {/* 桌機表格 */}
         <div className="hidden overflow-x-auto lg:block">
           <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
@@ -170,8 +205,6 @@ export default async function VendorOrdersPage({ searchParams }) {
               <tr>
                 <th className="px-5 py-3">訂單編號</th>
                 <th className="px-5 py-3">訂餐員工</th>
-                <th className="px-5 py-3">餐點名稱</th>
-                <th className="px-5 py-3">數量</th>
                 <th className="px-5 py-3">金額</th>
                 <th className="px-5 py-3">訂餐時間</th>
                 <th className="px-5 py-3">取餐日期</th>
@@ -186,25 +219,14 @@ export default async function VendorOrdersPage({ searchParams }) {
                   <tr key={order.id} className="hover:bg-[var(--surface-muted)]">
                     <td className="px-5 py-4 font-semibold text-[var(--navy-900)]">{order.id}</td>
                     <td className="px-5 py-4 text-slate-600">{order.employee_name}</td>
-                    <td className="px-5 py-4 font-semibold text-slate-900">{order.menu_name}</td>
-                    <td className="px-5 py-4 text-slate-600">{order.quantity} 份</td>
-                    <td className="px-5 py-4 font-bold text-[var(--navy-600)]">
-                      ${order.total_amount.toLocaleString()}
-                    </td>
+                    <td className="px-5 py-4 font-bold text-[var(--navy-600)]">${(order.total_amount || 0).toLocaleString()}</td>
                     <td className="px-5 py-4 text-slate-600">{formatDate(order.order_date)}</td>
                     <td className="px-5 py-4 text-slate-600">{formatDate(order.pickup_date)}</td>
                     <td className="px-5 py-4">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${meta.className}`}>
-                        {meta.label}
-                      </span>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${meta.className}`}>{meta.label}</span>
                     </td>
                     <td className="px-5 py-4 text-right">
-                      <Link
-                        href={`/vendor/orders/${order.raw_id}`}
-                        className="rounded-md border border-[var(--navy-100)] px-3 py-2 text-sm font-bold text-[var(--navy-600)] hover:bg-[var(--navy-50)]"
-                      >
-                        查看
-                      </Link>
+                      <Link href={`/vendor/orders/${order.raw_id}`} className="rounded-md border border-[var(--navy-100)] px-3 py-2 text-sm font-bold text-[var(--navy-600)] hover:bg-[var(--navy-50)]">查看</Link>
                     </td>
                   </tr>
                 );
@@ -221,38 +243,22 @@ export default async function VendorOrdersPage({ searchParams }) {
               <article key={order.id} className="rounded-lg border border-[var(--line)] bg-white p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-bold text-[var(--navy-900)]">{order.menu_name}</p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      {order.employee_name}・{order.quantity} 份
-                    </p>
+                    <p className="font-bold text-[var(--navy-900)]">{order.employee_name}</p>
                   </div>
-                  <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${meta.className}`}>
-                    {meta.label}
-                  </span>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${meta.className}`}>{meta.label}</span>
                 </div>
                 <div className="mt-3 flex items-center justify-between text-sm">
                   <span className="text-slate-500">取餐 {formatDate(order.pickup_date)}</span>
-                  <span className="font-black text-[var(--navy-600)]">
-                    ${order.total_amount.toLocaleString()}
-                  </span>
+                  <span className="font-black text-[var(--navy-600)]">${(order.total_amount || 0).toLocaleString()}</span>
                 </div>
                 <p className="mt-1 text-xs text-slate-400">{order.id}</p>
-                <Link
-                  href={`/vendor/orders/${order.raw_id}`}
-                  className="mt-4 inline-flex w-full justify-center rounded-md bg-[var(--navy-600)] px-3 py-2 text-sm font-bold text-white"
-                >
-                  查看訂單
-                </Link>
+                <Link href={`/vendor/orders/${order.raw_id}`} className="mt-4 inline-flex w-full justify-center rounded-md bg-[var(--navy-600)] px-3 py-2 text-sm font-bold text-white">查看訂單</Link>
               </article>
             );
           })}
         </div>
 
-        {!filtered.length && (
-          <div className="p-8 text-center text-sm text-slate-500">
-            目前沒有符合條件的訂單。
-          </div>
-        )}
+        {!filtered.length && <div className="p-8 text-center text-sm text-slate-500">目前沒有符合條件的訂單。</div>}
       </section>
     </div>
   );

@@ -1,43 +1,44 @@
 // app/api/vendor/menus/route.js
-import { NextResponse } from "next/server";
+// 代理：新增菜單 POST /api/v1/vendors/me/menus
 import { cookies } from "next/headers";
-import { SERVICES, ENDPOINTS } from "@/lib/api"; 
+import { NextResponse } from "next/server";
+import { COOKIE_NAME, SERVICES, apiFetch, serviceUrl } from "@/lib/api";
 
-export async function POST(req) {
+export async function POST(request) {
+  const token   = (await cookies()).get(COOKIE_NAME)?.value;
+  const payload = await request.json().catch(() => ({}));
+
+  if (!token) {
+    return NextResponse.json({ message: "未登入" }, { status: 401 });
+  }
+
+  // 後端還沒好時 mock 成功，讓前端可以繼續開發
+  if (!SERVICES.vendor) {
+    console.warn("[api/vendor/menus] VENDOR_URL 未設定，回傳 mock 成功");
+    return NextResponse.json(
+      { id: `mock-${Date.now()}`, ...payload },
+      { status: 201 }
+    );
+  }
+
   try {
-    const body = await req.json();
-    
-    // 1. 取得使用者的 Token (透過 Cookie)
-    const cookieStore = cookies();
-    const token = cookieStore.get("token")?.value; // 請確認你們存 token 的 cookie 名稱是不是 'token'
+    const res = await apiFetch(
+      serviceUrl(SERVICES.vendor, "/api/v1/vendors/me/menus"),
+      { method: "POST", token, body: payload }
+    );
 
-    // 2. 組合真實後端網址 (對應 api.js 裡的 vendorMeMenus)
-    const backendBase = SERVICES.vendor || "http://140.113.62.166:3001";
-    const targetUrl = `${backendBase}${ENDPOINTS.vendorMeMenus}`; // 應該會是 /api/v1/vendors/me/menus
-
-    // 3. 攜帶 Token 發送 POST 請求給真實後端
-    const res = await fetch(targetUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(body),
-    });
+    const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
       return NextResponse.json(
-        { message: errorData.message || "後端拒絕新增餐點" },
+        { message: data.message || "新增餐點失敗" },
         { status: res.status }
       );
     }
 
-    const data = await res.json();
-    return NextResponse.json(data);
-    
-  } catch (error) {
-    console.error("POST Menu Error:", error);
-    return NextResponse.json({ message: "內部伺服器錯誤" }, { status: 500 });
+    return NextResponse.json(data, { status: 201 });
+  } catch (err) {
+    console.error("[api/vendor/menus POST]", err);
+    return NextResponse.json({ message: "伺服器錯誤，請稍後再試" }, { status: 500 });
   }
 }
