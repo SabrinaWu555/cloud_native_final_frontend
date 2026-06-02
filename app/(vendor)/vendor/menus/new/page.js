@@ -1,4 +1,4 @@
-// app/(vendor)/vendor/menus/new/page.js
+// app/(main)/vendor/menus/new/page.js
 "use client";
 
 import { useState, useRef } from "react";
@@ -6,37 +6,38 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 const TAG_OPTIONS = [
-  { code: "VEGETARIAN", label: "素食" },
-  { code: "BEEF", label: "牛肉" },
-  { code: "CHICKEN", label: "雞肉" },
-  { code: "PORK", label: "豬肉" },
-  { code: "LAMB", label: "羊肉" },
-  { code: "CHINESE", label: "中式" },
-  { code: "JAPANESE", label: "日式" },
-  { code: "ITALIAN", label: "義式" },
+  { code: "VEGETARIAN",    label: "素食" },
+  { code: "BEEF",          label: "牛肉" },
+  { code: "CHICKEN",       label: "雞肉" },
+  { code: "PORK",          label: "豬肉" },
+  { code: "LAMB",          label: "羊肉" },
+  { code: "CHINESE",       label: "中式" },
+  { code: "JAPANESE",      label: "日式" },
+  { code: "ITALIAN",       label: "義式" },
   { code: "SOUTHEAST_ASIAN", label: "東南亞" },
-  { code: "AMERICAN", label: "美式" },
-  { code: "BUDGET", label: "便宜" },
-  { code: "SPICY", label: "辣" },
-  { code: "MILD", label: "不辣" },
+  { code: "AMERICAN",      label: "美式" },
+  { code: "BUDGET",        label: "便宜" },
+  { code: "SPICY",         label: "辣" },
+  { code: "MILD",          label: "不辣" },
 ];
 
+const DEFAULT_IMAGE = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop";
+
 export default function NewMenuPage() {
-  const router = useRouter();
+  const router      = useRouter();
   const fileInputRef = useRef(null);
-  
-  const [loading, setLoading] = useState(false);
+
+  const [loading,        setLoading]        = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [error, setError] = useState("");
-  
-  const [imagePreview, setImagePreview] = useState(""); // 預覽圖片用
-  const [uploadedUrl, setUploadedUrl] = useState("");   // 最終要傳給後端的 S3 網址
+  const [error,          setError]          = useState("");
+  const [imagePreview,   setImagePreview]   = useState("");
+  const [uploadedUrl,    setUploadedUrl]    = useState("");  // 最終要傳給後端的 S3 URL
 
   const [form, setForm] = useState({
-    name: "",
-    price: "",
+    name:       "",
+    price:      "",
     dailyLimit: "",
-    tags: [],
+    tags:       [],
   });
 
   function onChange(e) {
@@ -44,53 +45,49 @@ export default function NewMenuPage() {
   }
 
   function onTagChange(code) {
-    setForm((prev) => {
-      const isSelected = prev.tags.includes(code);
-      const newTags = isSelected
+    setForm((prev) => ({
+      ...prev,
+      tags: prev.tags.includes(code)
         ? prev.tags.filter((t) => t !== code)
-        : [...prev.tags, code];
-      return { ...prev, tags: newTags };
-    });
+        : [...prev.tags, code],
+    }));
   }
 
-  // ✨ 核心功能：處理圖片檔案上傳 (S3 Pre-signed URL 流程)
+  // ── 圖片上傳流程（S3 Pre-signed URL） ──────────────────────────────
   async function handleFileChange(e) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // 1. 前端本地預覽
+    // Step 0：本地即時預覽
     const reader = new FileReader();
-    reader.onloadend = () => {
-      setImagePreview(reader.result);
-    };
+    reader.onloadend = () => setImagePreview(reader.result);
     reader.readAsDataURL(file);
 
     setUploadingImage(true);
     setError("");
 
     try {
-      // 2. 向後端請求 S3 Pre-signed URL
-      // 注意：後端路徑根據 README 為 /api/v1/vendors/me/menus/upload-image-url
-      // 這裡透過 Next.js Proxy 或實際 API Gateway 呼叫
-      const res = await fetch(`/api/vendor/menus/upload-image-url?contentType=${encodeURIComponent(file.type)}`);
-      
-      if (!res.ok) throw new Error("無法取得上傳授權網址，狀態碼：" + res.status);
-      
+      // Step 1：向 Next.js Route Handler 取得 Pre-signed URL
+      // Route Handler 會帶 Cookie 打後端 GET /api/v1/vendors/me/menus/upload-image-url
+      const res = await fetch(
+        `/api/vendor/menus/upload-image-url?contentType=${encodeURIComponent(file.type)}`
+      );
+      if (!res.ok) throw new Error(`無法取得上傳授權網址 (${res.status})`);
+
       const { uploadUrl, imageUrl } = await res.json();
+      if (!uploadUrl) throw new Error("後端未回傳 uploadUrl");
 
-      // 3. 使用 PUT 直接將二進位檔案上傳至 AWS S3
-      const uploadRes = await fetch(uploadUrl, {
-        method: "PUT",
+      // Step 2：直接 PUT 到 S3（不經過 Next.js，節省頻寬）
+      const s3Res = await fetch(uploadUrl, {
+        method:  "PUT",
         headers: { "Content-Type": file.type },
-        body: file,
+        body:    file,
       });
+      if (!s3Res.ok) throw new Error(`圖片上傳至 S3 失敗 (${s3Res.status})`);
 
-      if (!uploadRes.ok) throw new Error("圖片上傳至 S3 失敗");
-
-      // 4. 紀錄 S3 回傳的真實圖片網址，等等給表單送出用
+      // Step 3：記下 S3 回傳的公開讀取 URL，submit 時帶入
       setUploadedUrl(imageUrl);
     } catch (err) {
-      console.error(err);
       setError(err.message || "圖片上傳失敗，請重試");
       setImagePreview("");
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -99,6 +96,7 @@ export default function NewMenuPage() {
     }
   }
 
+  // ── 送出表單 ────────────────────────────────────────────────────────
   async function onSubmit(e) {
     e.preventDefault();
     setError("");
@@ -107,37 +105,36 @@ export default function NewMenuPage() {
       setError("請填寫餐點名稱、價格與每日供應份數");
       return;
     }
-
     if (uploadingImage) {
-      setError("圖片還在努力上傳中，請稍候...");
+      setError("圖片還在上傳中，請稍候...");
       return;
     }
 
     setLoading(true);
     try {
+      // POST /api/vendor/menus → Route Handler → POST /api/v1/vendors/me/menus
       const res = await fetch("/api/vendor/menus", {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: form.name,
-          price: Number(form.price),
+          name:       form.name,
+          price:      Number(form.price),
           dailyLimit: Number(form.dailyLimit),
-          // 如果商家沒上傳圖片，給一個漂亮的預設食物驚喜圖，避免後端報錯
-          imageUrl: uploadedUrl || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop",
-          tags: form.tags,
+          imageUrl:   uploadedUrl || DEFAULT_IMAGE,
+          tags:       form.tags,
         }),
       });
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.message || "新增失敗，請檢查後端服務或資料格式");
+        setError(data.message || `新增失敗 (${res.status})`);
         return;
       }
 
       router.push("/vendor/menus");
       router.refresh();
     } catch {
-      setError("網路錯誤，請確認後端伺服器是否正常運作");
+      setError("網路錯誤，請確認後端服務是否正常");
     } finally {
       setLoading(false);
     }
@@ -145,9 +142,10 @@ export default function NewMenuPage() {
 
   return (
     <div className="mx-auto w-full max-w-xl space-y-6">
+
       {/* 麵包屑 */}
       <div className="flex items-center gap-2 text-xs text-slate-500">
-        <Link href="/vendor" className="hover:text-[var(--teal-600)]">工作台</Link>
+        <Link href="/vendor"       className="hover:text-[var(--teal-600)]">工作台</Link>
         <span>/</span>
         <Link href="/vendor/menus" className="hover:text-[var(--teal-600)]">菜單管理</Link>
         <span>/</span>
@@ -155,11 +153,12 @@ export default function NewMenuPage() {
       </div>
 
       {/* 表單 */}
-      <section className="surface-panel rounded-lg px-6 py-7 bg-white shadow-sm border border-[var(--line)]">
+      <section className="surface-panel rounded-lg border border-[var(--line)] bg-white px-6 py-7 shadow-sm">
         <h1 className="text-2xl font-black text-[var(--navy-900)]">新增餐點</h1>
-        <p className="mt-1 text-sm text-slate-500">填寫餐點基本資料，並上傳實體照片</p>
+        <p className="mt-1 text-sm text-slate-500">填寫餐點基本資料，上傳後自動儲存至雲端</p>
 
         <form onSubmit={onSubmit} className="mt-6 space-y-5">
+
           {/* 餐點名稱 */}
           <div>
             <label className="block text-sm font-bold text-[var(--navy-900)]">
@@ -192,7 +191,7 @@ export default function NewMenuPage() {
             </div>
             <div>
               <label className="block text-sm font-bold text-[var(--navy-900)]">
-                每日預設供應量 <span className="text-red-500">*</span>
+                每日供應份數 <span className="text-red-500">*</span>
               </label>
               <input
                 name="dailyLimit"
@@ -206,29 +205,27 @@ export default function NewMenuPage() {
             </div>
           </div>
 
-          {/* ✨ 改版：實體圖片上傳欄位 */}
+          {/* 圖片上傳 */}
           <div>
             <label className="block text-sm font-bold text-[var(--navy-900)]">
-              餐點照片 <span className="text-xs font-normal text-slate-500">（上傳後將自動儲存至雲端）</span>
+              餐點照片{" "}
+              <span className="text-xs font-normal text-slate-500">（選填，上傳後直接存至 S3）</span>
             </label>
-            
             <div className="mt-1.5 flex items-center gap-4">
-              {/* 圖片預覽區 */}
-              <div className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-md border border-[var(--line)] bg-slate-50 overflow-hidden text-slate-400">
+              {/* 預覽 */}
+              <div className="relative flex h-20 w-20 shrink-0 overflow-hidden rounded-md border border-[var(--line)] bg-slate-50">
                 {imagePreview ? (
                   <img src={imagePreview} alt="預覽" className="h-full w-full object-cover" />
                 ) : (
-                  <span className="text-xs">無照片</span>
+                  <span className="m-auto text-xs text-slate-400">無照片</span>
                 )}
-                {/* 上傳中遮罩 */}
                 {uploadingImage && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-[10px] font-bold text-white">
                     上傳中...
                   </div>
                 )}
               </div>
-
-              {/* 檔案選擇按鈕 */}
+              {/* 選檔 */}
               <div className="flex-1">
                 <input
                   type="file"
@@ -237,26 +234,30 @@ export default function NewMenuPage() {
                   onChange={handleFileChange}
                   className="w-full text-xs text-slate-500 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-700 file:transition hover:file:bg-slate-200"
                 />
-                <p className="mt-1 text-xs text-slate-400">支援 JPG, PNG 格式</p>
+                <p className="mt-1 text-xs text-slate-400">支援 JPG、PNG 格式</p>
+                {uploadedUrl && (
+                  <p className="mt-1 text-xs font-semibold text-[var(--teal-600)]">✓ 圖片已上傳至雲端</p>
+                )}
               </div>
             </div>
           </div>
 
-          {/* 食物標籤 (Tags) */}
+          {/* 標籤 */}
           <div>
-            <label className="block text-sm font-bold text-[var(--navy-900)] mb-2">
-              餐點特徵標籤 <span className="text-xs font-normal text-slate-500">（供推薦系統使用，可複選）</span>
+            <label className="mb-2 block text-sm font-bold text-[var(--navy-900)]">
+              餐點標籤{" "}
+              <span className="text-xs font-normal text-slate-500">（供推薦系統使用，可複選）</span>
             </label>
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
               {TAG_OPTIONS.map((tag) => {
-                const isChecked = form.tags.includes(tag.code);
+                const checked = form.tags.includes(tag.code);
                 return (
                   <button
                     key={tag.code}
                     type="button"
                     onClick={() => onTagChange(tag.code)}
                     className={`flex items-center justify-center rounded-md border py-2 text-xs font-semibold transition ${
-                      isChecked
+                      checked
                         ? "border-[var(--teal-600)] bg-[var(--teal-50)] text-[var(--teal-600)] shadow-sm"
                         : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                     }`}
@@ -270,19 +271,23 @@ export default function NewMenuPage() {
 
           {/* 錯誤訊息 */}
           {error && (
-            <div className="rounded-md bg-red-50 px-3 py-2 text-sm font-semibold text-red-500 border border-red-100">
+            <div className="rounded-md border border-red-100 bg-red-50 px-3 py-2 text-sm font-semibold text-red-500">
               ⚠️ {error}
             </div>
           )}
 
-          {/* 按鈕組 */}
-          <div className="flex gap-3 pt-2 border-t border-[var(--line)]">
+          {/* 按鈕 */}
+          <div className="flex gap-3 border-t border-[var(--line)] pt-4">
             <button
               type="submit"
               disabled={loading || uploadingImage}
               className="flex-1 rounded-md bg-[var(--navy-600)] py-2.5 text-sm font-bold text-white transition hover:bg-[var(--navy-800)] disabled:opacity-50"
             >
-              {loading ? "正在儲存上架..." : uploadingImage ? "請等待圖片上傳完成" : "確認上架餐點"}
+              {loading
+                ? "儲存中..."
+                : uploadingImage
+                  ? "請等待圖片上傳完成"
+                  : "確認上架餐點"}
             </button>
             <Link
               href="/vendor/menus"

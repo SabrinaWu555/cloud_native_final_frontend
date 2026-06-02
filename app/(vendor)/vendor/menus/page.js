@@ -7,20 +7,25 @@ import Link from "next/link";
 async function getMenus() {
   if (!SERVICES.vendor) return MOCK_MENUS;
   const token = (await cookies()).get(COOKIE_NAME)?.value;
+  console.log("Fetching menus with token:", token);
   try {
-    const res = await apiFetch(serviceUrl(SERVICES.vendor, ENDPOINTS.menus), { token });
+    const res = await apiFetch(serviceUrl(SERVICES.vendor, ENDPOINTS.vendorMeMenus), { token });
     if (!res.ok) return MOCK_MENUS;
     const data = await jsonOrEmpty(res);
     return Array.isArray(data) ? data : data.menus || MOCK_MENUS;
-  } catch {
+  } catch (error) {
+    console.error("Failed to fetch menus:", error);
     return MOCK_MENUS;
   }
 }
 
 export default async function VendorMenusPage() {
   const menus = await getMenus();
-  const available = menus.filter((m) => Number(m.daily_limit ?? 0) > 0);
-  const soldOut   = menus.filter((m) => Number(m.daily_limit ?? 0) === 0);
+  console.log("Raw menus data:", menus);
+  const available = menus.filter((m) => Number(m.effectiveDailyLimit ?? 0) > 0);
+  const soldOut   = menus.filter((m) => Number(m.effectiveDailyLimit ?? 0) === 0);
+
+  console.log("Fetched menus:", menus);
 
   return (
     <div className="w-full space-y-6">
@@ -105,12 +110,12 @@ function MenuCard({ menu, soldOut = false }) {
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--navy-50)]">
         <div
           className={`h-full rounded-full ${soldOut ? "bg-slate-300" : "bg-[var(--teal-400)]"}`}
-          style={{ width: `${Math.min(100, Number(menu.daily_limit ?? 0) * 5)}%` }}
+          style={{ width: `${Math.min(100, Number(menu.effectiveDailyLimit ?? 0) * 5)}%` }}
         />
       </div>
       <div className="mt-2 flex items-center justify-between">
         <p className="text-xs font-semibold text-slate-500">
-          剩餘 {menu.daily_limit ?? 0} 份
+          剩餘 {menu.effectiveDailyLimit ?? 0} 份
         </p>
         {/* 編輯按鈕 — 之後接 /vendor/menus/[id]/edit */}
         <Link

@@ -116,7 +116,6 @@ export default function EditMenuPage() {
     setError("");
 
     try {
-      // ✅ 透過 proxy 取得 S3 Pre-signed URL
       const res = await fetch(
         `/api/vendor/menus/upload-image-url?contentType=${encodeURIComponent(file.type)}`,
       );
@@ -260,6 +259,7 @@ export default function EditMenuPage() {
                 min="0"
                 value={form.price}
                 onChange={onChange}
+                onWheel={(e) => e.target.blur()}
                 placeholder={original?.price ?? ""}
                 className={INPUT_CLS}
               />
@@ -274,6 +274,7 @@ export default function EditMenuPage() {
                 min="0"
                 value={form.dailyLimit}
                 onChange={onChange}
+                onWheel={(e) => e.target.blur()}
                 placeholder={original?.dailyLimit ?? ""}
                 className={INPUT_CLS}
               />
