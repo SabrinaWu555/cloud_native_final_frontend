@@ -133,9 +133,9 @@ export default function LoginPage() {
           </form>
 
           <p className="mt-5 text-center text-sm text-slate-500">
-            員工尚未建立帳號？{" "}
+            外部商家想加入？{" "}
             <Link href="/register" className="font-bold text-[var(--navy-600)] hover:underline">
-              建立員工帳號
+              申請入駐
             </Link>
           </p>
         </div>

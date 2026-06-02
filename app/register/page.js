@@ -1,207 +1,404 @@
+// app/register/page.js — 外部商家申請入駐
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-const initialForm = {
-  employeeNo: "",
-  name: "",
-  department: "",
-  phone: "",
-  email: "",
-  password: "",
-  confirmPassword: "",
-};
+const FACTORY_ZONES = [
+  { value: "A廠", label: "A 廠" },
+  { value: "B廠", label: "B 廠" },
+  { value: "C廠", label: "C 廠" },
+];
+
+// 驗證碼有效時間（秒）
+const CODE_TTL = 300; // 5 分鐘
 
 export default function RegisterPage() {
-  const router = useRouter();
-  const [form, setForm] = useState(initialForm);
+  const [form, setForm] = useState({
+    vendorName: "",
+    email: "",
+    phone: "",
+    factoryZones: [],
+  });
+
+  // 驗證碼相關狀態
+  const [generatedCode, setGeneratedCode] = useState("");
+  const [codeSentAt, setCodeSentAt] = useState(null); // 時間戳
+  const [inputCode, setInputCode] = useState("");
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
+
+  // 檔案上傳
+  const [documentsKey, setDocumentsKey] = useState("");
+  const [uploading, setUploading] = useState(false);
+
+  // 送出狀態
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(null); // { id }
 
   function updateField(field, value) {
-    setForm((current) => ({ ...current, [field]: value }));
+    setForm((c) => ({ ...c, [field]: value }));
+    // 改 email 時，驗證狀態重置
+    if (field === "email") {
+      setEmailVerified(false);
+      setGeneratedCode("");
+      setInputCode("");
+    }
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
-    setSuccess("");
+  function toggleZone(z) {
+    setForm((c) => ({
+      ...c,
+      factoryZones: c.factoryZones.includes(z)
+        ? c.factoryZones.filter((x) => x !== z)
+        : [...c.factoryZones, z],
+    }));
+  }
 
-    if (form.password !== form.confirmPassword) {
-      setError("兩次輸入的密碼不一致");
+  // 產生 6 位數驗證碼 + 呼叫後端寄信
+  async function sendVerificationCode() {
+    if (!form.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      setError("請先填寫正確的 Email");
+      return;
+    }
+    setSendingCode(true);
+    setError("");
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+
+    try {
+      const res = await fetch("/api/register/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: form.email, code }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "寄送驗證信失敗");
+      }
+      setGeneratedCode(code);
+      setCodeSentAt(Date.now());
+      setEmailVerified(false);
+    } catch (err) {
+      setError(err.message || "寄送驗證信失敗");
+    } finally {
+      setSendingCode(false);
+    }
+  }
+
+  // 驗證使用者輸入的驗證碼
+  function verifyCode() {
+    if (!codeSentAt) {
+      setError("請先點「發送驗證碼」");
+      return;
+    }
+    if ((Date.now() - codeSentAt) / 1000 > CODE_TTL) {
+      setError("驗證碼已過期，請重新發送");
+      setGeneratedCode("");
+      setCodeSentAt(null);
+      return;
+    }
+    if (inputCode !== generatedCode) {
+      setError("驗證碼錯誤");
+      return;
+    }
+    setEmailVerified(true);
+    setError("");
+  }
+
+  // 上傳營登 PDF
+  async function uploadPdf(file) {
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      setError("請選擇 PDF 檔");
+      return;
+    }
+    setUploading(true);
+    setError("");
+    try {
+      // Step 1: 跟後端拿 Pre-signed URL
+      const urlRes = await fetch("/api/register/upload-url");
+      if (!urlRes.ok) throw new Error("無法取得上傳網址");
+      const { uploadUrl, documentKey } = await urlRes.json();
+
+      // Step 2: 直接 PUT 到 S3
+      const putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "application/pdf" },
+        body: file,
+      });
+      if (!putRes.ok) throw new Error("PDF 上傳失敗");
+
+      setDocumentsKey(documentKey);
+    } catch (err) {
+      setError(err.message || "PDF 上傳失敗");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  // 送出申請
+  async function submit(e) {
+    e.preventDefault();
+    if (!emailVerified) {
+      setError("請先完成 Email 驗證");
+      return;
+    }
+    if (form.factoryZones.length === 0) {
+      setError("請至少選一個廠區");
+      return;
+    }
+    if (!documentsKey) {
+      setError("請上傳營登 PDF");
       return;
     }
 
-    setLoading(true);
-
+    setSubmitting(true);
+    setError("");
     try {
-      const res = await fetch("/api/auth/register", {
+      const res = await fetch("/api/register/applications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          employeeNo: form.employeeNo,
-          employee_no: form.employeeNo,
-          name: form.name,
-          department: form.department,
-          phone: form.phone,
+          vendorName: form.vendorName,
           email: form.email,
-          password: form.password,
-          role: "employee",
+          phone: form.phone,
+          factoryZones: form.factoryZones,
+          documentsKey,
         }),
       });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        setError(data.message || "註冊失敗，請確認資料後再試一次");
-        return;
-      }
-
-      setSuccess("帳號建立成功，正在前往登入頁。");
-      setForm(initialForm);
-      setTimeout(() => router.push("/login?role=employee&next=/employee"), 800);
-    } catch {
-      setError("無法連線，請稍後再試");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "申請失敗");
+      setSuccess(data);
+    } catch (err) {
+      setError(err.message || "申請失敗");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   }
 
-  return (
-    <main className="min-h-screen bg-[var(--neutral-bg)]">
-      <header className="border-b border-[var(--line)] bg-white/95 px-4 py-4 backdrop-blur sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-md bg-[var(--navy-800)] text-xs font-black text-white">
-              TSMC
-            </span>
-            <span>
-              <span className="block font-black text-[var(--navy-900)]">企業訂餐平台</span>
-              <span className="block text-xs font-semibold text-[var(--teal-600)]">員工註冊</span>
-            </span>
-          </Link>
-          <Link
-            href="/login?role=employee&next=/employee"
-            className="text-sm font-bold text-[var(--navy-600)] hover:underline"
-          >
-            返回登入
-          </Link>
-        </div>
-      </header>
+  // 申請成功畫面
+  if (success) {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-[var(--navy-900)] to-[var(--admin-coffee-900)] px-4 py-12 text-white">
+        <div className="mx-auto max-w-xl">
+          <div className="surface-panel rounded-lg p-8">
+            <p className="text-sm font-bold uppercase tracking-[0.2em] text-[var(--teal-600)]">
+              Application Submitted
+            </p>
+            <h1 className="mt-3 text-3xl font-black text-[var(--navy-900)]">入駐申請已送出</h1>
+            <p className="mt-3 text-sm text-slate-600">
+              福委會將於 3 ~ 5 個工作天內完成審核，審核結果會以 Email 通知您。
+            </p>
 
-      <div className="grid w-full gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[0.72fr_1.28fr] lg:px-8">
-        <section className="rounded-lg bg-[var(--navy-900)] p-6 text-white lg:min-h-[calc(100vh-132px)]">
-          <p className="text-sm font-bold uppercase tracking-[0.2em] text-[var(--teal-200)]">
-            Register
-          </p>
-          <h1 className="mt-4 text-4xl font-black leading-tight">建立員工訂餐帳號</h1>
-          <div className="mt-8 grid gap-3 text-sm">
-            <Step index="1" label="建立 IAM 使用者" />
-            <Step index="2" label="建立員工資料" />
-            <Step index="3" label="前往員工端登入" />
+            <div className="mt-6 rounded-md bg-[var(--admin-coffee-50)] p-4">
+              <p className="text-xs font-bold text-[var(--admin-coffee-700)]">
+                申請編號（請務必保留）
+              </p>
+              <p className="mt-2 break-all font-mono text-sm font-black text-[var(--admin-coffee-900)]">
+                {success.id}
+              </p>
+              <p className="mt-2 text-xs text-slate-600">
+                可用此編號查詢審核進度。也已發送至您的 Email：{form.email}
+              </p>
+            </div>
+
+            <Link
+              href="/login"
+              className="mt-6 inline-flex w-full justify-center rounded-md bg-[var(--navy-600)] py-2.5 text-sm font-bold text-white transition hover:bg-[var(--navy-800)]"
+            >
+              回登入頁
+            </Link>
           </div>
-        </section>
+        </div>
+      </main>
+    );
+  }
 
-        <form onSubmit={handleSubmit} className="surface-panel grid gap-5 rounded-lg p-6">
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-[var(--navy-900)] to-[var(--admin-coffee-900)] px-4 py-12">
+      <div className="mx-auto max-w-2xl">
+        <Link
+          href="/login"
+          className="inline-flex items-center gap-2 rounded-md border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
+        >
+          ← 回登入頁
+        </Link>
+
+        <div className="surface-panel mt-5 rounded-lg p-6 sm:p-8">
+          <p className="text-sm font-bold uppercase tracking-[0.2em] text-[var(--teal-600)]">
+            Vendor Registration
+          </p>
+          <h1 className="mt-2 text-3xl font-black text-[var(--navy-900)]">商家入駐申請</h1>
+          <p className="mt-2 text-sm text-slate-500">
+            請填寫公司資料、驗證 Email、上傳營登文件。福委會審核通過後，會寄送商家登入帳號至您的信箱。
+          </p>
+
           {error && (
-            <div className="rounded-md bg-[var(--error-bg)] px-3 py-2 text-sm font-medium text-[var(--error-fg)]">
+            <div className="mt-5 rounded-md bg-[var(--error-bg)] px-3 py-2 text-sm font-medium text-[var(--error-fg)]">
               {error}
             </div>
           )}
-          {success && (
-            <div className="rounded-md bg-[var(--success-bg)] px-3 py-2 text-sm font-medium text-[var(--success-fg)]">
-              {success}
+
+          <form onSubmit={submit} className="mt-6 space-y-4">
+            {/* 公司名稱 */}
+            <label className="block">
+              <span className="mb-1 block text-sm font-semibold text-slate-700">公司 / 店家名稱 *</span>
+              <input
+                value={form.vendorName}
+                onChange={(e) => updateField("vendorName", e.target.value)}
+                required
+                placeholder="例如：好吃便當"
+                className="w-full rounded-md border border-[var(--line)] bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--teal-400)]"
+              />
+            </label>
+
+            {/* Email + 驗證碼 */}
+            <div className="space-y-2">
+              <label className="block">
+                <span className="mb-1 block text-sm font-semibold text-slate-700">聯絡 Email *</span>
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => updateField("email", e.target.value)}
+                    required
+                    placeholder="contact@example.com"
+                    disabled={emailVerified}
+                    className="flex-1 rounded-md border border-[var(--line)] bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--teal-400)] disabled:bg-slate-50"
+                  />
+                  <button
+                    type="button"
+                    onClick={sendVerificationCode}
+                    disabled={sendingCode || emailVerified || !form.email}
+                    className="shrink-0 rounded-md border border-[var(--teal-400)] bg-white px-4 text-sm font-bold text-[var(--teal-600)] transition hover:bg-[var(--teal-50)] disabled:opacity-50"
+                  >
+                    {sendingCode ? "寄送中..." : emailVerified ? "已驗證" : "發送驗證碼"}
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-slate-400">
+                  審核通過後，登入帳號會以此 Email 為準
+                </p>
+              </label>
+
+              {/* 驗證碼欄位（只在已發送、未驗證時顯示） */}
+              {generatedCode && !emailVerified && (
+                <div className="rounded-md bg-[var(--teal-50)] p-3">
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-bold text-[var(--teal-600)]">
+                      輸入 6 位數驗證碼（{Math.floor(CODE_TTL / 60)} 分鐘內有效）
+                    </span>
+                    <div className="flex gap-2">
+                      <input
+                        value={inputCode}
+                        onChange={(e) => setInputCode(e.target.value)}
+                        maxLength={6}
+                        placeholder="輸入信件中的 6 位數字"
+                        className="flex-1 rounded-md border border-[var(--teal-200)] bg-white px-3 py-2 text-sm font-mono outline-none focus:border-[var(--teal-400)]"
+                      />
+                      <button
+                        type="button"
+                        onClick={verifyCode}
+                        className="shrink-0 rounded-md bg-[var(--teal-600)] px-4 text-sm font-bold text-white transition hover:bg-[var(--teal-700)]"
+                      >
+                        驗證
+                      </button>
+                    </div>
+                  </label>
+                </div>
+              )}
+
+              {emailVerified && (
+                <p className="rounded-md bg-[var(--success-bg)] px-3 py-2 text-sm font-semibold text-[var(--success-fg)]">
+                  ✓ Email 驗證成功
+                </p>
+              )}
             </div>
-          )}
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field
-              label="員工編號"
-              value={form.employeeNo}
-              onChange={(value) => updateField("employeeNo", value)}
-              required
-            />
-            <Field
-              label="姓名"
-              value={form.name}
-              onChange={(value) => updateField("name", value)}
-              required
-            />
-            <Field
-              label="部門"
-              value={form.department}
-              onChange={(value) => updateField("department", value)}
-              required
-            />
-            <Field
-              label="電話"
-              value={form.phone}
-              onChange={(value) => updateField("phone", value)}
-            />
-            <Field
-              label="Email"
-              type="email"
-              value={form.email}
-              onChange={(value) => updateField("email", value)}
-              required
-            />
-          </div>
+            {/* 電話 */}
+            <label className="block">
+              <span className="mb-1 block text-sm font-semibold text-slate-700">聯絡電話</span>
+              <input
+                type="tel"
+                value={form.phone}
+                onChange={(e) => updateField("phone", e.target.value)}
+                placeholder="0912345678"
+                className="w-full rounded-md border border-[var(--line)] bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--teal-400)]"
+              />
+            </label>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field
-              label="密碼"
-              type="password"
-              value={form.password}
-              onChange={(value) => updateField("password", value)}
-              required
-            />
-            <Field
-              label="確認密碼"
-              type="password"
-              value={form.confirmPassword}
-              onChange={(value) => updateField("confirmPassword", value)}
-              required
-            />
-          </div>
+            {/* 廠區（多選） */}
+            <div>
+              <span className="mb-2 block text-sm font-semibold text-slate-700">
+                想服務的廠區 *（可多選）
+              </span>
+              <div className="grid grid-cols-3 gap-2">
+                {FACTORY_ZONES.map((z) => {
+                  const checked = form.factoryZones.includes(z.value);
+                  return (
+                    <label
+                      key={z.value}
+                      className={`flex cursor-pointer items-center justify-center gap-2 rounded-md border p-3 text-sm font-semibold transition ${
+                        checked
+                          ? "border-[var(--teal-400)] bg-[var(--teal-50)] text-[var(--teal-600)]"
+                          : "border-[var(--line)] bg-white text-slate-600 hover:border-slate-300"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleZone(z.value)}
+                        className="sr-only"
+                      />
+                      {z.label}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="min-h-11 rounded-md bg-[var(--navy-600)] px-6 text-sm font-bold text-white transition hover:bg-[var(--navy-800)] disabled:opacity-60"
-          >
-            {loading ? "建立中..." : "建立帳號"}
-          </button>
-        </form>
+            {/* PDF 上傳 */}
+            <div>
+              <span className="mb-1 block text-sm font-semibold text-slate-700">營業登記文件 (PDF) *</span>
+              <label
+                className={`flex cursor-pointer items-center justify-center rounded-md border-2 border-dashed p-6 transition ${
+                  documentsKey
+                    ? "border-[var(--success-fg)] bg-[var(--success-bg)]"
+                    : "border-[var(--line)] bg-[var(--surface-muted)] hover:bg-slate-100"
+                }`}
+              >
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={(e) => uploadPdf(e.target.files?.[0])}
+                  disabled={uploading}
+                  className="sr-only"
+                />
+                <span className="text-sm font-semibold text-slate-600">
+                  {uploading
+                    ? "上傳中..."
+                    : documentsKey
+                      ? "✓ PDF 已上傳，可點此重新選擇檔案"
+                      : "點此選擇 PDF 檔（最大 10MB）"}
+                </span>
+              </label>
+            </div>
+
+            {/* 送出按鈕 */}
+            <button
+              type="submit"
+              disabled={submitting || !emailVerified || !documentsKey || form.factoryZones.length === 0}
+              className="mt-4 w-full rounded-md bg-[var(--navy-600)] py-3 text-sm font-bold text-white transition hover:bg-[var(--navy-800)] disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {submitting ? "送出申請中..." : "送出申請"}
+            </button>
+
+            <p className="text-center text-xs text-slate-400">
+              送出後福委會將進行人工審核，3 ~ 5 個工作天內以 Email 通知結果
+            </p>
+          </form>
+        </div>
       </div>
     </main>
-  );
-}
-
-function Field({ label, type = "text", value, onChange, required }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-sm font-semibold text-slate-700">{label}</span>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        required={required}
-        className="w-full rounded-md border border-[var(--line)] bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[var(--teal-400)] focus:ring-2 focus:ring-[var(--teal-200)]/50"
-      />
-    </label>
-  );
-}
-
-function Step({ index, label }) {
-  return (
-    <div className="flex items-center gap-3 rounded-md border border-white/10 bg-white/10 px-3 py-3">
-      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--teal-200)] text-sm font-black text-[var(--navy-900)]">
-        {index}
-      </span>
-      <span className="font-semibold text-white/80">{label}</span>
-    </div>
   );
 }
