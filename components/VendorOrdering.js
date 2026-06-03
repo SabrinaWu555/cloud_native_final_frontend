@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import DateSelector from "@/components/DateSelector";
 import { getNextDays } from "@/lib/dates";
 
-export default function VendorOrdering({ vendor, menus }) {
+export default function VendorOrdering({ vendor, menus, zone }) {
   const router = useRouter();
   const days = useMemo(() => getNextDays(7), []);
 
@@ -135,6 +135,7 @@ export default function VendorOrdering({ vendor, menus }) {
             targetDate: date,
             target_date: date,
             items,
+            factoryZone: zone ? `${zone}廠` : "",
           }),
         });
         const data = await res.json().catch(() => ({}));
