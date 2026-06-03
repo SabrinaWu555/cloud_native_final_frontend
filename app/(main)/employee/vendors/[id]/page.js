@@ -62,6 +62,21 @@ async function getVendorData(id) {
       is_active: m.isActive !== false,
     })).filter(m => m.is_active); // 只顯示上架的
 
+    console.log("Fetched vendor data:", { vendor, menus });
+    let imageUrl = vendor.imageUrl || vendor.image_url || vendor.image || null;
+
+    // Fallback：若單一端點沒有回傳圖片，從列表撈
+    if (!imageUrl) {
+      try {
+        const listRes = await apiFetch(serviceUrl(SERVICES.vendor, ENDPOINTS.vendors), { token });
+        if (listRes.ok) {
+          const list = await jsonOrEmpty(listRes);
+          const found = (Array.isArray(list) ? list : list.vendors ?? []).find((v) => v.id === id);
+          if (found) imageUrl = found.imageUrl || found.image_url || null;
+        }
+      } catch {}
+    }
+
     const vendorMapped = {
       id: vendor.id || id,
       name: vendor.name,
@@ -69,7 +84,7 @@ async function getVendorData(id) {
       rating: vendor.rating ?? 4.5,
       eta: vendor.eta || "—",
       description: vendor.description || "",
-      image_url: vendor.imageUrl || null,
+      image_url: imageUrl,
       zones: vendor.allowedAreas || (vendor.factoryZone ? [vendor.factoryZone] : []),
       is_open: vendor.status ? vendor.status === "ACTIVE" : true,
     };
@@ -110,10 +125,14 @@ export default async function VendorDetailPage({ params, searchParams }) {
       </Link>
 
       <section className="surface-panel overflow-hidden rounded-lg">
-        <div className="aspect-[21/9] w-full bg-gradient-to-br from-[var(--navy-50)] via-white to-[var(--teal-50)]">
-          <div className="flex h-full items-center justify-center">
-            <span className="text-xs font-bold uppercase tracking-[0.3em] text-[var(--navy-600)]">TSMC Vendor</span>
-          </div>
+        <div className="aspect-[21/9] w-full overflow-hidden bg-gradient-to-br from-[var(--navy-50)] via-white to-[var(--teal-50)]">
+          {vendor.image_url ? (
+            <img src={vendor.image_url} alt={vendor.name} className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <span className="text-xs font-bold uppercase tracking-[0.3em] text-[var(--navy-600)]">TSMC Vendor</span>
+            </div>
+          )}
         </div>
         <div className="p-5 sm:p-6">
           <div className="flex flex-wrap items-center gap-2">
