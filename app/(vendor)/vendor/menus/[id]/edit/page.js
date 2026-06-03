@@ -287,8 +287,8 @@ export default function EditMenuPage() {
             <div className="mt-1.5 flex items-center gap-4">
               <div className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-[var(--line)] bg-slate-50 text-slate-400">
                 {imagePreview ? (
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={imagePreview} alt="餐點照片" className="h-full w-full object-cover" />
+                  <>{/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={imagePreview} alt="餐點照片" className="h-full w-full object-cover" /></>
                 ) : (
                   <span className="text-xs">無照片</span>
                 )}

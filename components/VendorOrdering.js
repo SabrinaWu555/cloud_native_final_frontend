@@ -11,9 +11,11 @@ export default function VendorOrdering({ vendor, menus, zone }) {
 
   // 只在 client hydration 後設為 true，讓 days 以 client 本地時間重算
   const [isClient, setIsClient] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setIsClient(true); }, []);
 
   // SSR 用 server 時間；hydration 後 isClient=true，以 client 時間重算（解決時區偏差）
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const days = useMemo(() => getNextDays(7), [isClient]);
 
   // 初始預設選「第一個非 disabled 的日期」
