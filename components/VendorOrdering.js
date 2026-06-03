@@ -1,6 +1,7 @@
 // components/VendorOrdering.js — 商家詳情頁的菜單 + 購物車 + 多日期下單
 "use client";
 import {  useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import DateSelector from "@/components/DateSelector";
 import { getNextDays } from "@/lib/dates";
@@ -15,7 +16,6 @@ export default function VendorOrdering({ vendor, menus, zone }) {
   // 當日期切換時，重撈該日期的庫存
   useEffect(() => {
     if (dates.length === 0) {
-      setStockMap({});
       return;
     }
     // 只查第一個選中的日期（簡化）
@@ -42,7 +42,7 @@ export default function VendorOrdering({ vendor, menus, zone }) {
 
   const remainingOf = (menu) => {
     // 先看即時庫存（後端 daily_inventory），沒有再 fallback dailyLimit
-    const stock = stockMap[menu.id];
+    const stock = dates.length === 0 ? undefined : stockMap[menu.id];
     if (stock !== null && stock !== undefined) return Number(stock);
     return Number(menu?.daily_limit ?? menu?.remaining ?? 0);
   };
@@ -306,12 +306,12 @@ export default function VendorOrdering({ vendor, menus, zone }) {
               </p>
             )}
             {status === "done" && (
-              <a
+              <Link
                 href="/orders"
                 className="mt-2 block text-center text-sm font-bold text-[var(--navy-600)] hover:underline"
               >
                 前往查看歷史訂單 →
-              </a>
+              </Link>
             )}
           </div>
         </aside>
