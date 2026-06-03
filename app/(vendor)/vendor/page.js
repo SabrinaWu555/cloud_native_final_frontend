@@ -232,7 +232,7 @@ export default async function VendorPage() {
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-bold text-slate-500">備餐準備</p>
-            <h2 className="mt-1 text-2xl font-black text-[var(--navy-900)]">近三天備料總覽</h2>
+            <h2 className="mt-1 text-2xl font-black text-[var(--navy-900)]">近期備料總覽</h2>
           </div>
           <Link href="/vendor/orders" className="text-xs font-semibold text-[var(--teal-600)] hover:underline">
             查看整週 →

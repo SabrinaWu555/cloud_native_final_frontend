@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ENDPOINTS, SERVICES, apiFetch, serviceUrl, withPathParams } from "@/lib/api";
+
+
 
 const STATUS_LABELS = {
   pending: "待確認",
@@ -15,7 +16,7 @@ const STATUS_LABELS = {
   cancelled: "已取消/已拒單",
 };
 
-// 商家狀態推進面板設定（預設接單，不需確認步驟）
+// 商家狀態推進面板設定
 const STATUS_FLOW = {
   pending:   { next: "preparing", label: "開始備餐", color: "bg-[var(--navy-600)] hover:bg-[var(--navy-800)]" },
   ordered:   { next: "preparing", label: "開始備餐", color: "bg-[var(--navy-600)] hover:bg-[var(--navy-800)]" },
@@ -24,30 +25,26 @@ const STATUS_FLOW = {
   ready:     { next: "completed", label: "員工已取餐，確認核銷", color: "bg-green-600 hover:bg-green-700" },
 };
 
-// 輔助函式：標準化並清洗後端資料結構
 function normalizeOrder(data) {
-  // 1. 解析多品項陣列，若 price 為 null 則給予預設防護值（例如這裡防護給 30 元，實務上會依據後端快照）
   const items = Array.isArray(data.items) ? data.items.map(item => {
-    const itemPrice = Number(item.price ?? item.price_snapshot ?? 30); // 若後端 price 為 null 的防護值
+    const itemPrice = Number(item.total_price ?? item.price ?? item.price_snapshot ?? data.price_snapshot ?? 0);
     return {
       menu_id: item.menu_id,
-      name: item.name ?? "未知餐點",
+      name: item.name ?? data.menu_name ?? "未知餐點",
       price: itemPrice,
-      quantity: Number(item.quantity ?? 1),
+      quantity: Number(item.quantity ?? data.quantity ?? 1),
     };
   }) : [];
 
-  // 2. 如果 items 陣列為空，但外層有舊結構欄位，做相容性防護
-  if (items.length === 0 && (data.menu_name || data.price)) {
+  if (items.length === 0 && (data.menu_name || data.menu_id || data.price_snapshot || data.price)) {
     items.push({
       menu_id: data.menu_id || "unknown",
       name: data.menu_name || "未知餐點",
       price: Number(data.price ?? data.price_snapshot ?? 0),
-      quantity: Number(data.quantity ?? 1)
+      quantity: Number(data.quantity ?? 1),
     });
   }
 
-  // 3. 計算總價（若後端 total_amount 為 null，則由前端品項小計加總）
   const computedTotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
   return {
@@ -80,7 +77,10 @@ export default function VendorOrderDetailPage() {
       setLoading(true);
       setError("");
       try {
-        const res = await fetch(`/api/orders/${id}`, { cache: "no-store" });
+        const targetUrl = `/api/vendor/orders/${id}`;
+
+        const res = await fetch(targetUrl, { cache: "no-store" });
+        console.log("Fetch order response:", res);
         const data = await res.json().catch(() => ({}));
 
         if (!res.ok) throw new Error(data.message || "讀取訂單失敗");
@@ -105,7 +105,8 @@ export default function VendorOrderDetailPage() {
     setMessage("");
 
     try {
-      const res = await fetch(`/api/orders/${id}`, {
+      const targetUrl = `/api/vendor/orders/${id}`;
+      const res = await fetch(targetUrl, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: nextStatus }),
@@ -126,31 +127,29 @@ export default function VendorOrderDetailPage() {
   }
 
   async function handleReject() {
-  setSaving(true);
-  setError("");
-  setMessage("");
+    setSaving(true);
+    setError("");
+    setMessage("");
 
-  try {
-    // 打 Next.js Route Handler，讓它帶 Cookie 轉發到後端
-    const res = await fetch(`/api/vendor/orders/${id}/reject`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cancel_reason: "商家主動拒單/取消" }),
-    });
+    try {
+      const res = await fetch(`/api/vendor/orders/${id}/reject`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cancel_reason: "商家主動拒單/取消" }),
+      });
 
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.message || "後端拒單處理失敗");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "後端拒單處理失敗");
 
-    // 更新本地狀態
-    setOrder((prev) => prev ? { ...prev, status: "cancelled" } : prev);
-    setMessage("訂單已成功拒絕/取消");
-    router.refresh();
-  } catch (err) {
-    setError(err.message || "取消失敗");
-  } finally {
-    setSaving(false);
+      setOrder((prev) => prev ? { ...prev, status: "cancelled" } : prev);
+      setMessage("訂單已成功拒絕/取消");
+      router.refresh();
+    } catch (err) {
+      setError(err.message || "取消失敗");
+    } finally {
+      setSaving(false);
+    }
   }
-}
 
   if (loading) {
     return <div className="surface-panel rounded-lg p-8 text-sm text-slate-500">訂單明細讀取中...</div>;
@@ -173,8 +172,7 @@ export default function VendorOrderDetailPage() {
 
   return (
     <div className="w-full space-y-6">
-      
-      {/* 頂部標題列 - 保持原樣 */}
+      {/* 頂部標題列 */}
       <section className="surface-panel rounded-lg px-4 py-5 sm:px-6 lg:px-8">
         <Link href="/vendor/orders" className="text-sm font-bold text-[var(--navy-600)] hover:underline">
           ← 返回訂單佇列
@@ -200,15 +198,13 @@ export default function VendorOrderDetailPage() {
 
       {/* 主內容區 */}
       <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        
-        {/* 左側：出餐核心核心資訊（全新修改：多品項列表模式） */}
+        {/* 左側：出餐核心資訊 */}
         <div className="surface-panel space-y-6 rounded-lg p-6">
           <div>
             <span className="text-sm font-bold text-slate-500">預計取餐時間: </span>
             <span className="text-base font-black text-slate-900">{order.pickup_date} {order.pickup_time}</span>
           </div>
 
-          {/* 品項清單區塊 */}
           <div className="border-t border-slate-100 pt-4">
             <div className="space-y-3">
               {order.items.map((item, index) => (
@@ -224,7 +220,6 @@ export default function VendorOrderDetailPage() {
             </div>
           </div>
 
-          {/* 總價與備註區塊 */}
           <div className="border-t border-slate-100 pt-4 space-y-3">
             <div className="text-base font-black text-slate-900">
               <span>總價: </span>
@@ -239,7 +234,6 @@ export default function VendorOrderDetailPage() {
             </div>
           </div>
 
-          {/* 附帶下單人資訊小字 */}
           <div className="border-t border-slate-50 pt-2 text-xs text-slate-400">
             員工帳號: {order.user_email} · 下單日期: {order.order_date}
           </div>
@@ -262,7 +256,6 @@ export default function VendorOrderDetailPage() {
               </div>
             )}
 
-            {/* 核心推進按鈕 */}
             <div className="mt-6">
               {!isFinalStatus && currentFlow ? (
                 <div className="space-y-4">
@@ -280,7 +273,6 @@ export default function VendorOrderDetailPage() {
             </div>
           </div>
 
-          {/* 拒單/取消功能：只有在未做完前可以執行 */}
           {!isFinalStatus && (
             <div className="mt-8 border-t border-slate-100 pt-4">
               <p className="text-xs text-slate-400 mb-2">若因食材不足或特殊狀況無法出餐：</p>
@@ -299,7 +291,6 @@ export default function VendorOrderDetailPage() {
             </div>
           )}
         </div>
-
       </section>
     </div>
   );
