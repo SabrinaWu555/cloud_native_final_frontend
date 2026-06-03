@@ -1,43 +1,50 @@
-// components/DateSelector.js — 多選日期選擇器
+// components/DateSelector.js
 "use client";
 
-export default function DateSelector({ days, selected = [], onChange }) {
-  function toggle(value) {
-    const next = selected.includes(value)
-      ? selected.filter((v) => v !== value)
-      : [...selected, value];
-    onChange(next);
+export default function DateSelector({ days, selected, onChange }) {
+  function toggle(value, disabled) {
+    if (disabled) return;  // 點不動
+    if (selected.includes(value)) {
+      onChange(selected.filter((d) => d !== value));
+    } else {
+      onChange([...selected, value]);
+    }
   }
 
   return (
-    <div className="surface-panel rounded-lg p-3">
-      <p className="mb-2 px-1 text-xs font-bold uppercase tracking-wider text-[var(--teal-600)]">
-        選擇取餐日期（可多選未來一週內任一天）
+    <section className="surface-panel rounded-lg p-4">
+      <p className="mb-3 text-sm font-bold text-[var(--navy-600)]">
+        選擇取餐日期（可多選未來一週內任意天）
       </p>
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className="flex flex-wrap gap-2">
         {days.map((d) => {
-          const active = selected.includes(d.value);
+          const isSelected = selected.includes(d.value);
+          const isDisabled = d.disabled;
           return (
             <button
               key={d.value}
               type="button"
-              onClick={() => toggle(d.value)}
-              className={`flex min-w-[72px] shrink-0 flex-col items-center rounded-md border px-3 py-2 transition ${
-                active
-                  ? "border-[var(--navy-600)] bg-[var(--navy-600)] text-white"
-                  : "border-[var(--line)] bg-white text-[var(--navy-900)] hover:border-[var(--teal-200)]"
+              onClick={() => toggle(d.value, isDisabled)}
+              disabled={isDisabled}
+              title={d.disabledReason || ""}
+              className={`min-h-11 rounded-md border px-4 text-sm font-bold transition ${
+                isDisabled
+                  ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 line-through"
+                  : isSelected
+                    ? "border-[var(--navy-600)] bg-[var(--navy-600)] text-white"
+                    : "border-[var(--line)] bg-white text-slate-600 hover:border-[var(--navy-400)]"
               }`}
             >
-              <span className="text-sm font-bold">{d.label}</span>
-              <span className={`text-xs ${active ? "text-white/80" : "text-slate-500"}`}>{d.md}</span>
-              {/* {active && <span className="mt-0.5 text-[10px] text-white/90">✓ 已選</span>} */}
+              {d.label}
+              {/* {isDisabled && <span className="ml-1 text-xs">🚫</span>} */}
             </button>
           );
         })}
       </div>
-      {selected.length === 0 && (
-        <p className="mt-2 px-1 text-xs text-[var(--error-fg)]">請至少選擇一天</p>
-      )}
-    </div>
+      {/* 截止時間提示 */}
+      <p className="mt-3 text-xs text-slate-500">
+        每日 17:00 為截止時間，過後當日不再開放訂購明日餐點
+      </p>
+    </section>
   );
 }
