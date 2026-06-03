@@ -10,7 +10,11 @@ export default function VendorOrdering({ vendor, menus, zone }) {
   const router = useRouter();
   const days = useMemo(() => getNextDays(7), []);
 
-  const [dates, setDates] = useState([days[0].value]);
+  // 初始預設選「第一個非 disabled 的日期」
+  const [dates, setDates] = useState(() => {
+    const firstAvailable = days.find((d) => !d.disabled);
+    return firstAvailable ? [firstAvailable.value] : [];
+  });
   const [cart, setCart] = useState({});
   const [stockMap, setStockMap] = useState({});
   // 當日期切換時，重撈該日期的庫存
