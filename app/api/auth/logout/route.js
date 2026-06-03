@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { COOKIE_NAME, ROLE_COOKIE_NAME } from "@/lib/api";
 
 function clearCookie(response, name) {
+  const isSecure = process.env.COOKIE_SECURE === "true";
   response.cookies.set(name, "", {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecure,
     path: "/",
     maxAge: 0,
   });
