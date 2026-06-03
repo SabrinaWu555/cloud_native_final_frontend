@@ -5,22 +5,45 @@ import { useState } from "react";
 
 export default function VendorProfilePanel({ profile }) {
   const router = useRouter();
-  const [editing, setEditing] = useState(null); // "email" | "phone" | "description" | "password" | null
+  const [editing, setEditing] = useState(null); // "email" | "phone" | "category" | "description" | "password" | null
 
   const zonesDisplay = profile.factory_zones?.length
     ? profile.factory_zones.join("、")
     : "—";
 
+  // 送 PUT 時後端需要完整欄位，所以各 editor 共用這份 base
+  const vendorBase = {
+    name: profile.name,
+    category: profile.category,
+    description: profile.description,
+  };
+
   return (
     <section className="surface-panel rounded-lg p-5 sm:p-6">
       <h2 className="text-lg font-black text-[var(--navy-900)]">基本資料</h2>
-      <p className="mt-1 text-xs text-slate-500">商家編號、名稱、類別、供應廠區由系統建檔，無法自行修改</p>
+      <p className="mt-1 text-xs text-slate-500">商家編號、名稱、供應廠區由系統建檔，無法自行修改</p>
 
       <div className="mt-5 divide-y divide-slate-100">
         <ReadOnlyField label="商家編號" value={profile.vendor_id ? `VND-${profile.vendor_id}` : "—"} />
         <ReadOnlyField label="商家名稱" value={profile.name || "—"} />
-        <ReadOnlyField label="商品類別" value={profile.category || "—"} />
         <ReadOnlyField label="供應廠區" value={zonesDisplay} />
+
+        <EditableField
+          label="商品類別"
+          value={profile.category || "—"}
+          editing={editing === "category"}
+          onEdit={() => setEditing("category")}
+          onCancel={() => setEditing(null)}
+          editor={
+            <VendorFieldEditor
+              fieldLabel="商品類別"
+              currentValue={profile.category}
+              fieldKey="category"
+              vendorBase={vendorBase}
+              onSuccess={() => { setEditing(null); router.refresh(); }}
+            />
+          }
+        />
 
         <EditableField
           label="商家簡介"
@@ -29,12 +52,13 @@ export default function VendorProfilePanel({ profile }) {
           onEdit={() => setEditing("description")}
           onCancel={() => setEditing(null)}
           editor={
-            <DescriptionEditor
-              currentDescription={profile.description}
-              onSuccess={() => {
-                setEditing(null);
-                router.refresh();
-              }}
+            <VendorFieldEditor
+              fieldLabel="商家簡介"
+              currentValue={profile.description}
+              fieldKey="description"
+              vendorBase={vendorBase}
+              multiline
+              onSuccess={() => { setEditing(null); router.refresh(); }}
             />
           }
         />
@@ -128,23 +152,23 @@ function EditableField({ label, value, editing, onEdit, onCancel, editor }) {
   );
 }
 
-function DescriptionEditor({ currentDescription, onSuccess }) {
-  const [desc, setDesc] = useState(currentDescription || "");
+function VendorFieldEditor({ fieldLabel, currentValue, fieldKey, vendorBase, multiline, onSuccess }) {
+  const [value, setValue] = useState(currentValue || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   async function submit() {
-    if (desc === currentDescription) {
-      setError("簡介與目前相同");
+    if (value === currentValue) {
+      setError(`${fieldLabel}與目前相同`);
       return;
     }
     setSaving(true);
     setError("");
     try {
       const res = await fetch("/api/vendor/me", {
-        method: "PATCH",
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: desc }),
+        body: JSON.stringify({ ...vendorBase, [fieldKey]: value }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || data.error || "修改失敗");
@@ -163,13 +187,23 @@ function DescriptionEditor({ currentDescription, onSuccess }) {
           {error}
         </div>
       )}
-      <textarea
-        value={desc}
-        onChange={(e) => setDesc(e.target.value)}
-        rows={4}
-        placeholder="輸入商家簡介..."
-        className="w-full rounded-md border border-[var(--line)] bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--teal-400)] resize-none"
-      />
+      {multiline ? (
+        <textarea
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          rows={4}
+          placeholder={`輸入${fieldLabel}...`}
+          className="w-full rounded-md border border-[var(--line)] bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--teal-400)] resize-none"
+        />
+      ) : (
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={`輸入${fieldLabel}...`}
+          className="w-full rounded-md border border-[var(--line)] bg-white px-3 py-2.5 text-sm outline-none focus:border-[var(--teal-400)]"
+        />
+      )}
       <button
         onClick={submit}
         disabled={saving}
