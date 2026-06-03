@@ -81,8 +81,16 @@ export default function VendorNavbar() {
 
           <div className="flex items-center gap-2 border-l border-white/20 pl-3">
             <div className="hidden text-right sm:block">
-              <p className="text-sm font-bold leading-tight">{displayName}</p>
+              <p className="text-sm font-bold leading-tight">
+                {displayName}
+                {vendor?.status === "SUSPENDED" && (
+                  <span className="ml-2 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-black text-white">
+                    停權中
+                  </span>
+                )}
+              </p>
               <p className="text-xs text-[var(--vendor-gray-100)]">vendor</p>
+              
             </div>
             <Link
               href="/vendor/profile"

@@ -172,6 +172,24 @@ async function getBillingRevenue() {
   }
 }
 
+async function getVendorProfile() {
+  const token = (await cookies()).get(COOKIE_NAME)?.value;
+  if (!token || !SERVICES.vendor) return null;
+
+  try {
+    const res = await apiFetch(
+      serviceUrl(SERVICES.vendor, ENDPOINTS.vendorMe ?? "/api/v1/vendors/me"),
+      { token }
+    );
+    if (!res.ok) return null;
+    const data = await jsonOrEmpty(res);
+    return data?.data ?? data;
+  } catch (error) {
+    console.error("取得商家資料失敗:", error);
+    return null;
+  }
+}
+
 async function getMenus() {
   if (!SERVICES.vendor) return MOCK_MENUS;
 
@@ -211,14 +229,51 @@ function buildPrepSummary(orders) {
 }
 
 export default async function VendorPage() {
-  const [orders, menus, revenue, recentNotifications] = await Promise.all([getOrders("upcoming"), getMenus(), getBillingRevenue(), getRecentNotifications()]);
+  const [orders, menus, revenue, recentNotifications, vendorProfile] = await Promise.all([
+    getOrders("upcoming"),
+    getMenus(),
+    getBillingRevenue(),
+    getRecentNotifications(),
+    getVendorProfile(),
+  ]);
   const activeOrders = orders.filter((order) => !["completed", "cancelled"].includes(order.status));
   const availableMenus = menus.filter((menu) => Number(menu.effectiveDailyLimit ?? 0) > 0 && menu.isActive);
   const prepSummary = buildPrepSummary(orders);
   const previewDays = prepSummary.slice(0, 3);
 
+  const isSuspended = vendorProfile?.status === "SUSPENDED";
+  const suspendReason = vendorProfile?.suspendReason ?? "未提供具體原因，請聯繫系統管理員。";
+  const suspendedAtDate = vendorProfile?.suspendedAt
+    ? new Date(vendorProfile.suspendedAt).toLocaleDateString("zh-TW")
+    : "未知時間";
+
   return (
     <div className="w-full space-y-6">
+      {isSuspended && (
+        <section className="rounded-lg border border-red-200 bg-red-50 p-5 text-red-900 shadow-sm">
+          <div className="flex items-start gap-3">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-600 font-bold text-white text-xs">
+              !
+            </span>
+            <div className="space-y-1">
+              <h2 className="text-lg font-black text-red-700">您的商家帳號已被系統停權</h2>
+              <p className="text-sm opacity-90">
+                目前您的店鋪已暫停對外營業，消費者將無法搜尋到您的餐點或進行下單。
+              </p>
+              <div className="mt-3 rounded border border-red-200 bg-white p-3 text-sm text-slate-700">
+                <p className="font-semibold text-red-600">
+                  ⚠️ 停權原因：<span className="text-slate-800 font-normal">{suspendReason}</span>
+                </p>
+                <p className="mt-1 text-xs text-slate-400">停權執行時間：{suspendedAtDate}</p>
+              </div>
+              <p className="mt-2 text-xs text-red-500">
+                您已被停權，請聯繫福委會申請復權或相關服務。
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="surface-panel grid gap-5 rounded-lg px-4 py-5 sm:px-6 lg:grid-cols-[1fr_auto] lg:items-center lg:px-7">
         <div>
           <p className="text-sm font-bold uppercase tracking-[0.18em] text-[var(--teal-600)]">
@@ -229,11 +284,15 @@ export default async function VendorPage() {
             管理今日供應、查看待出餐訂單，之後可直接接商家菜單與訂單服務。
           </p>
         </div>
-        
+
         <div className="flex flex-wrap items-center gap-3">
           <Link
-            href="/vendor/menus/new"
-            className="inline-flex min-h-11 items-center justify-center rounded-md bg-[var(--navy-600)] px-5 text-sm font-bold text-white transition hover:bg-[var(--navy-800)]"
+            href={isSuspended ? "#" : "/vendor/menus/new"}
+            className={`inline-flex min-h-11 items-center justify-center rounded-md px-5 text-sm font-bold text-white transition ${
+              isSuspended
+                ? "bg-slate-300 cursor-not-allowed opacity-60"
+                : "bg-[var(--navy-600)] hover:bg-[var(--navy-800)]"
+            }`}
           >
             新增餐點
           </Link>

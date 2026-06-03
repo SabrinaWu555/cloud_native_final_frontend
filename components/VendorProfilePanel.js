@@ -23,8 +23,17 @@ export default function VendorProfilePanel({ profile }) {
   return (
     <section className="surface-panel rounded-lg p-5 sm:p-6">
       <h2 className="text-lg font-black text-[var(--navy-900)]">基本資料</h2>
-      <p className="mt-1 text-xs text-slate-500">商家編號、名稱、供應廠區由系統建檔，無法自行修改</p>
-
+      <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+        <p className="text-slate-500">
+          商家編號、名稱、供應廠區由系統建檔，無法自行修改
+        </p>
+        
+        {profile?.status === "SUSPENDED" && (
+          <p className="font-semibold text-red-500">
+            ❗您已被停權，請聯繫福委會申請復權或相關服務。
+          </p>
+        )}
+      </div>
       <ImageUploadSection
         imageUrl={imageUrl}
         vendorBase={vendorBase}
