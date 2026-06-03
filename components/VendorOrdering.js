@@ -1,6 +1,6 @@
 // components/VendorOrdering.js — 商家詳情頁的菜單 + 購物車 + 多日期下單
 "use client";
-import {  useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import DateSelector from "@/components/DateSelector";
@@ -8,13 +8,26 @@ import { getNextDays } from "@/lib/dates";
 
 export default function VendorOrdering({ vendor, menus, zone }) {
   const router = useRouter();
-  const days = useMemo(() => getNextDays(7), []);
+  const [days, setDays] = useState(() => getNextDays(7));
 
   // 初始預設選「第一個非 disabled 的日期」
   const [dates, setDates] = useState(() => {
-    const firstAvailable = days.find((d) => !d.disabled);
+    const firstAvailable = getNextDays(7).find((d) => !d.disabled);
     return firstAvailable ? [firstAvailable.value] : [];
   });
+
+  // SSR 用 server 時間，hydration 後以 client 本地時間重算，並移除已截止的已選日期
+  useEffect(() => {
+    const clientDays = getNextDays(7);
+    setDays(clientDays);
+    const validSet = new Set(clientDays.filter((d) => !d.disabled).map((d) => d.value));
+    setDates((prev) => {
+      const cleaned = prev.filter((d) => validSet.has(d));
+      if (cleaned.length > 0) return cleaned;
+      const first = clientDays.find((d) => !d.disabled);
+      return first ? [first.value] : [];
+    });
+  }, []);
   const [cart, setCart] = useState({});
   const [stockMap, setStockMap] = useState({});
   // 當日期切換時，重撈該日期的庫存
