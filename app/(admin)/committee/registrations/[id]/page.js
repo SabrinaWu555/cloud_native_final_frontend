@@ -83,7 +83,11 @@ export default async function RegistrationDetailPage({ params }) {
               </div>
               <div>
                 <dt className="text-xs font-semibold text-slate-500">申請廠區</dt>
-                <dd className="mt-1 font-bold text-slate-900">{app.factoryZone || "未指定"}</dd>
+                <dd className="mt-1 font-bold text-slate-900">
+                  {Array.isArray(app.factoryZones) && app.factoryZones.length > 0
+                    ? app.factoryZones.join("、")
+                    : app.factoryZone || "未指定"}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs font-semibold text-slate-500">送出時間</dt>

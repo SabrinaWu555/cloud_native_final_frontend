@@ -56,7 +56,7 @@ export default function RegistrationReviewPanel({ applicationId, vendorName }) {
       }
 
       setResult(data);
-      router.refresh();
+      //router.refresh();
     } catch (err) {
       setError(err.message || "操作失敗");
     } finally {
@@ -64,6 +64,7 @@ export default function RegistrationReviewPanel({ applicationId, vendorName }) {
     }
   }
 
+  // 操作完成
   // 操作完成
   if (result) {
     return (
@@ -74,14 +75,33 @@ export default function RegistrationReviewPanel({ applicationId, vendorName }) {
           <p className="mt-1">後端已建立帳號並寄出歡迎信。</p>
         </div>
         {result.tempPassword && (
-          <div className="mt-4 rounded-md border border-[var(--warning-fg)]/30 bg-[var(--warning-bg)] p-4">
-            <p className="text-xs font-bold text-[var(--warning-fg)]">初始密碼（只顯示一次，請記下）</p>
-            <p className="mt-2 break-all font-mono text-sm font-black text-[var(--warning-fg)]">
+          <div className="mt-4 rounded-md border-2 border-[var(--warning-fg)] bg-[var(--warning-bg)] p-4">
+            <p className="text-xs font-bold text-[var(--warning-fg)]">
+              初始密碼（只顯示一次，請記下！）
+            </p>
+            <p className="mt-2 break-all font-mono text-lg font-black text-[var(--warning-fg)]">
               {result.tempPassword}
             </p>
-            <p className="mt-2 text-xs text-slate-500">已透過歡迎信寄給商家，可備份在此</p>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(result.tempPassword);
+                alert("已複製到剪貼簿！");
+              }}
+              className="mt-3 rounded-md bg-white px-3 py-1.5 text-xs font-bold text-[var(--warning-fg)] hover:bg-slate-50"
+            >
+              複製密碼
+            </button>
+            <p className="mt-2 text-xs text-slate-500">
+              密碼已透過歡迎信寄給商家，可備份此處
+            </p>
           </div>
         )}
+        <button
+          onClick={() => router.refresh()}
+          className="mt-5 w-full rounded-md bg-[var(--admin-coffee-600)] py-2.5 text-sm font-bold text-white transition hover:bg-[var(--admin-coffee-700)]"
+        >
+          我已記下密碼，關閉視窗
+        </button>
       </div>
     );
   }
