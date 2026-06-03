@@ -8,6 +8,7 @@ const STATUS_META = {
   ordered: { label: "已下單", className: "bg-[var(--navy-50)] text-[var(--navy-600)]" },
   ready: { label: "可領取", className: "bg-[var(--success-bg)] text-[var(--success-fg)]" },
   completed: { label: "已完成", className: "bg-slate-100 text-slate-600" },
+  confirmed: { label: "已下單", className: "bg-[var(--navy-50)] text-[var(--navy-600)]" },
   cancelled: { label: "已取消", className: "bg-[var(--error-bg)] text-[var(--error-fg)]" },
 };
 

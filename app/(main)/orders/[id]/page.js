@@ -10,7 +10,7 @@ import OrderCancelPanel from "@/components/OrderCancelPanel";
 
 const STATUS_LABELS = {
   pending: "待確認",
-  confirmed: "已下單",
+  confirmed: "已確認",
   ready: "可領取",
   completed: "已完成",
   cancelled: "已取消",

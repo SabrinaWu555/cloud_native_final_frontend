@@ -8,7 +8,7 @@ import { getMockNotification, markMockNotificationRead } from "@/lib/mockData";
 
 export const dynamic = "force-dynamic";
 
-const TYPE_LABELS = { create: "訂單建立", cancel: "訂單取消" };
+const TYPE_LABELS = { create: "訂單建立", cancel: "訂單取消", appeal: "申訴通知" };
 
 async function loadAndRead(id) {
   if (USE_LOCAL_MOCKS || !SERVICES.notification) {
@@ -52,8 +52,10 @@ function formatDateTime(value) {
 }
 
 function getNotificationCategory(item) {
-  const isCancel = item.type === "cancel" || String(item.title).includes("取消");
-  return isCancel ? "cancel" : "create";
+  const title = String(item.title);
+  if (item.type === "appeal" || title.includes("申訴")) return "appeal";
+  if (item.type === "cancel" || title.includes("取消")) return "cancel";
+  return "create";
 }
 
 export default async function VendorNotificationDetailPage({ params }) {
@@ -75,10 +77,12 @@ export default async function VendorNotificationDetailPage({ params }) {
   }
 
   const category = getNotificationCategory(item);
-  const isCancel = category === "cancel";
-  const tagColors = isCancel
-    ? "bg-[var(--error-bg)] text-[var(--error-fg)]"
-    : "bg-[var(--teal-50)] text-[var(--teal-600)]";
+  const tagColors =
+    category === "cancel"
+      ? "bg-[var(--error-bg)] text-[var(--error-fg)]"
+      : category === "appeal"
+        ? "bg-[var(--warning-bg,#fef3c7)] text-[var(--warning-fg,#b45309)]"
+        : "bg-[var(--teal-50)] text-[var(--teal-600)]";
 
   return (
     <div className="mx-auto w-full max-w-[820px] space-y-5">
@@ -100,7 +104,7 @@ export default async function VendorNotificationDetailPage({ params }) {
         <h1 className="mt-5 text-2xl font-black text-[var(--navy-900)] sm:text-3xl">{item.title}</h1>
 
         <div className="mt-6 border-t border-slate-100 pt-6">
-          <p className="whitespace-pre-wrap text-base leading-relaxed text-slate-700">{item.message}</p>
+          <p className="whitespace-pre-wrap text-base leading-relaxed text-slate-700">{item.content}</p>
         </div>
 
         <div className="mt-8 flex items-center gap-2">
