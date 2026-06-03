@@ -40,6 +40,7 @@ async function getProfile() {
       phone_number: vendorData.phone_number || vendorData.phone || "",
       description: vendorData.description || "",
       factory_zones: Array.isArray(vendorData.factoryZones) ? vendorData.factoryZones : [],
+      image_url: vendorData.imageUrl || vendorData.image_url || "",
     };
   } catch {
     return null;
