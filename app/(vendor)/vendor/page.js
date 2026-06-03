@@ -295,19 +295,34 @@ export default async function VendorPage() {
           <ul className="divide-y divide-slate-100">
             {recentNotifications.map((n) => {
               const unread = !n.read_at && !n.is_read;
-              const isCancel = n.type === "cancel" || String(n.title).includes("取消");
+              const titleStr = String(n.title);
+              
+              // 1. 定義各種類型的判斷條件
+              const isCancel = n.type === "cancel" || titleStr.includes("取消");
+              const isComplaint = n.type === "complaint" || n.type === "appeal" || titleStr.includes("申訴");
+
+              // 2. 根據類型決定標籤文字與樣式
+              let badgeLabel = "建立";
+              let badgeStyle = "border-[var(--teal-400)] bg-[var(--teal-50)] text-[var(--teal-600)]";
+
+              if (isCancel) {
+                badgeLabel = "取消";
+                badgeStyle = "border-[var(--error-fg)] bg-[var(--error-bg)] text-[var(--error-fg)]";
+              } else if (isComplaint) {
+                badgeLabel = "申訴";
+                // 使用與營收卡片相同的 warning 警告色系（橘/黃）
+                badgeStyle = "border-[var(--warning-fg)] bg-[var(--warning-bg)] text-[var(--warning-fg)]";
+              }
+
               return (
                 <li key={n.id}>
                   <Link
                     href={`/vendor/notifications/${n.id}`}
-                    className={`flex items-center gap-3 py-3 px-2 rounded-md transition ${unread ? "hover:bg-slate-100" : "hover:bg-slate-50"}`}
+                    className={`flex items-center gap-3 rounded-md py-3 px-2 transition ${unread ? "hover:bg-slate-100" : "hover:bg-slate-50"}`}
                   >
-                    <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-bold ${
-                      isCancel
-                        ? "border-[var(--error-fg)] bg-[var(--error-bg)] text-[var(--error-fg)]"
-                        : "border-[var(--teal-400)] bg-[var(--teal-50)] text-[var(--teal-600)]"
-                    }`}>
-                      {isCancel ? "取消" : "建立"}
+                    {/* 動態顯示標籤 */}
+                    <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-bold ${badgeStyle}`}>
+                      {badgeLabel}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2">
@@ -328,10 +343,10 @@ export default async function VendorPage() {
 
       <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <div className="surface-panel rounded-lg p-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-bold text-slate-500">菜單供應</p>
-              <h2 className="mt-1 text-2xl font-black text-[var(--navy-900)]">今日上架餐點</h2>
+              <p className="text-sm font-bold text-slate-500">銷售動態</p>
+              <h2 className="mt-1 text-2xl font-black text-[var(--navy-900)]">開放訂購中餐點</h2>
             </div>
             <Link
               href="/vendor/menus"
@@ -340,27 +355,34 @@ export default async function VendorPage() {
               管理菜單 →
             </Link>
           </div>
+          
+          <p className="mb-4 text-xs text-slate-500">顯示目前消費者可下單的餐點與剩餘額度</p>
+          
           <div className="grid gap-3">
-            {availableMenus.map((menu) => (
-              <article key={menu.id} className="rounded-md border border-[var(--line)] bg-white p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-black text-[var(--navy-900)]">{menu.name}</h3>
-                    <p className="mt-1 text-sm text-slate-500">{menu.category}</p>
+            {availableMenus.length === 0 ? (
+              <p className="text-sm text-slate-400 py-4 text-center">目前無開放訂購的餐點</p>
+            ) : (
+              availableMenus.map((menu) => (
+                <article key={menu.id} className="rounded-md border border-[var(--line)] bg-white p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-black text-[var(--navy-900)]">{menu.name}</h3>
+                      <p className="mt-1 text-sm text-slate-500">{menu.category}</p>
+                    </div>
+                    <span className="text-lg font-black text-[var(--navy-600)]">${menu.price}</span>
                   </div>
-                  <span className="text-lg font-black text-[var(--navy-600)]">${menu.price}</span>
-                </div>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--navy-50)]">
-                  <div
-                    className="h-full rounded-full bg-[var(--teal-400)]"
-                    style={{ width: `${Math.min(100, Number(menu.effectiveDailyLimit ?? 0) * 5)}%` }}
-                  />
-                </div>
-                <p className="mt-2 text-xs font-semibold text-slate-500">
-                  剩餘 {menu.effectiveDailyLimit ?? 0} 份
-                </p>
-              </article>
-            ))}
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--navy-50)]">
+                    <div
+                      className="h-full rounded-full bg-[var(--teal-400)]"
+                      style={{ width: `${Math.min(100, Number(menu.effectiveDailyLimit ?? 0) * 5)}%` }}
+                    />
+                  </div>
+                  <p className="mt-2 text-xs font-semibold text-slate-500">
+                    剩餘可售 {menu.effectiveDailyLimit ?? 0} 份
+                  </p>
+                </article>
+              ))
+            )}
           </div>
         </div>
 
