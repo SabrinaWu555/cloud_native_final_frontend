@@ -22,6 +22,7 @@ export default function AppealReviewPanel({ appealId }) {
     setSaving(true);
     setError("");
     try {
+      // Step 1: 改 申訴 status
       const res = await fetch(`/api/admin/appeals/${appealId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -33,6 +34,27 @@ export default function AppealReviewPanel({ appealId }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || data.error || "操作失敗");
+
+      // Step 2: 寄通知（成功 / 失敗都寄不同訊息）
+      try {
+        await fetch("/api/admin/appeals/notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            appealId,
+            action,
+            refund,
+            adminNotes,
+            employeeId: data.employee_id,
+            vendorId: data.vendor_id,
+            orderId: data.order_id,
+          }),
+        });
+      } catch (notifyErr) {
+        console.warn("通知寄送失敗，但申訴狀態已更新:", notifyErr);
+        // 寄信失敗不擋整體流程
+      }
+
       router.refresh();
     } catch (err) {
       setError(err.message || "操作失敗");
