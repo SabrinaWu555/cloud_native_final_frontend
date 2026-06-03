@@ -1,3 +1,4 @@
+// app/(vendor)/vendor/orders/[id]/page.js
 "use client";
 
 import Link from "next/link";
@@ -50,6 +51,7 @@ function normalizeOrder(data) {
   return {
     id: String(data.id).startsWith("ORD-") ? data.id : `ORD-${data.id}`,
     employee_name: data.employee_name ?? data.user_name ?? (data.user_id ? `員工 #${data.user_id}` : "未知員工"),
+    factory_zone: data.factoryZone ?? data.factory_zone ?? "未知廠區",
     status: data.status ?? "pending",
     order_date: (data.order_date ?? data.created_at)?.slice(0, 10) ?? "-",
     pickup_date: data.pickup_date ?? data.target_date ?? "-",
@@ -203,6 +205,11 @@ export default function VendorOrderDetailPage() {
           <div>
             <span className="text-sm font-bold text-slate-500">預計取餐時間: </span>
             <span className="text-base font-black text-slate-900">{order.pickup_date} {order.pickup_time}</span>
+          </div>
+
+          <div className="mt-2">
+            <span className="text-sm font-bold text-slate-500">配送廠區: </span>
+            <span className="text-base font-black text-[var(--navy-600)]">{order.factory_zone}</span>
           </div>
 
           <div className="border-t border-slate-100 pt-4">

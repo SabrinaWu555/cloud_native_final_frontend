@@ -98,6 +98,7 @@ async function getOrders(rangeParam, fromParam, toParam) {
         raw_id:        o.raw_id ?? o.id,
         employee_name: o.employee_name ?? o.user_name ?? (o.user_id ? `員工 #${o.user_id}` : "未知員工"),
         menu_name:     o.menu_name ?? o.items?.[0]?.name ?? "未知餐點",
+        factory_zone:  o.factoryZone ?? o.factory_zone ?? "未知廠區",
         status:        o.status ?? "pending",
         order_date:    (o.order_date ?? o.created_at)?.slice(0, 10) ?? null,
         pickup_date:   o.pickup_date ?? o.target_date ?? null,
@@ -257,6 +258,7 @@ export default async function VendorOrdersPage({ searchParams }) {
               <tr>
                 <th className="px-5 py-3">訂單編號</th>
                 <th className="px-5 py-3">訂餐員工</th>
+                <th className="px-5 py-3">廠區</th>
                 <th className="px-5 py-3">金額</th>
                 <th className="px-5 py-3">訂餐時間</th>
                 <th className="px-5 py-3">取餐日期</th>
@@ -271,6 +273,7 @@ export default async function VendorOrdersPage({ searchParams }) {
                   <tr key={order.id} className="hover:bg-[var(--surface-muted)]">
                     <td className="px-5 py-4 font-semibold text-[var(--navy-900)]">{order.id}</td>
                     <td className="px-5 py-4 text-slate-600">{order.employee_name}</td>
+                    <td className="px-5 py-4 text-slate-600">{order.factory_zone}</td>
                     <td className="px-5 py-4 font-bold text-[var(--navy-600)]">${(order.total_amount || 0).toLocaleString()}</td>
                     <td className="px-5 py-4 text-slate-600">{formatDate(order.order_date)}</td>
                     <td className="px-5 py-4 text-slate-600">{formatDate(order.pickup_date)}</td>
@@ -296,6 +299,7 @@ export default async function VendorOrdersPage({ searchParams }) {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-bold text-[var(--navy-900)]">{order.employee_name}</p>
+                    <p className="mt-0.5 text-sm text-slate-500">{order.factory_zone}</p>
                   </div>
                   <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${meta.className}`}>{meta.label}</span>
                 </div>
