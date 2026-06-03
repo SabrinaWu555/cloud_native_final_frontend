@@ -12,7 +12,7 @@ export default function DateSelector({ days, selected = [], onChange }) {
   return (
     <div className="surface-panel rounded-lg p-3">
       <p className="mb-2 px-1 text-xs font-bold uppercase tracking-wider text-[var(--teal-600)]">
-        選擇取餐日期（可多選未來一週內任意天）
+        選擇取餐日期（可多選未來一週內任一天）
       </p>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {days.map((d) => {

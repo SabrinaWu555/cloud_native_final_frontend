@@ -126,7 +126,7 @@ export default async function VendorDetailPage({ params, searchParams }) {
         </div>
       </section>
 
-      <VendorOrdering vendor={vendor} menus={menus} />
+      <VendorOrdering vendor={vendor} menus={menus} zone={zone} />
     </div>
   );
 }

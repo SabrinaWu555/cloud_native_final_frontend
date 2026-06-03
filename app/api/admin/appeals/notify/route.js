@@ -68,13 +68,11 @@ export async function POST(request) {
   }
 
   // === 通知商家 ===
-  // 🎯 依照需求，將 user_id 直接對應為 vendorId
   if (vendorId) {
     if (action === "approve") {
       results.vendorNotified = await sendNotification({
         user_id: vendorId, 
         title: `申訴成立通知：訂單 ORD-${shortOrderId}`,
-        // 🎯 模仿你的條列式格式設計 content
         content: `您有一筆訂單的客訴已由福委會核准成立。\n\n審核結果：申訴成立\n訂單編號：${orderId}\n退款金額：NT$ ${refund}\n違規點數：+1 點\n${adminNotes ? `審核備註：${adminNotes}\n` : ""}目前狀態：approved`,
         token,
       });

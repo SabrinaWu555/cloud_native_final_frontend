@@ -121,6 +121,7 @@ export async function POST(request) {
           menu_id: item.menu_id,
           quantity: Number(item.quantity),
           pickup_date: payload.target_date || payload.targetDate,
+          factoryZone: payload.factory_zone || payload.factoryZone || "",
         },
       }).then(async (r) => ({ ok: r.ok, status: r.status, data: await jsonOrEmpty(r) }))
     )
