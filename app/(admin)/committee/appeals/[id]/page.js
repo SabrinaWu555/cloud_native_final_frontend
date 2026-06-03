@@ -12,12 +12,16 @@ export const dynamic = "force-dynamic";
 async function getAppeal(id) {
   if (!SERVICES.appeal) return null;
   const token = (await cookies()).get(COOKIE_NAME)?.value;
+
+  // 把網址裡的 "APL-5" 拆成 "5"
+  const rawId = String(id).replace(/^APL-/, "");
+
   try {
     const res = await apiFetch(serviceUrl(SERVICES.appeal, ENDPOINTS.appeals), { token });
     if (!res.ok) return null;
     const data = await jsonOrEmpty(res);
     const list = Array.isArray(data) ? data : data.appeals || [];
-    return list.find((a) => String(a.id) === String(id)) || null;
+    return list.find((a) => String(a.id) === rawId) || null;
   } catch {
     return null;
   }
