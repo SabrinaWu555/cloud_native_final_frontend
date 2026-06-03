@@ -1,54 +1,44 @@
+// components/OrderCompleteButton.js — 確認收貨按鈕
 "use client";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function OrderCompleteButton({ orderId, status }) {
   const router = useRouter();
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const canComplete = status === "ready";
+  // 只有 confirmed 狀態才顯示「確認收貨」按鈕
+  if (status !== "confirmed") return null;
 
-  if (!canComplete) return null;
+  async function handleComplete(e) {
+    e.stopPropagation();
+    e.preventDefault();
 
-  async function completeOrder() {
-    if (!window.confirm("確認已收到餐點，將訂單標記為已完成？")) return;
-    setSaving(true);
-    setError("");
-    setMessage("");
+    if (!window.confirm("確認已收到此訂單？\n確認後將通知商家完成此筆交易。")) return;
+
+    setLoading(true);
     try {
-      const res = await fetch(`/api/orders/${orderId}/complete`, { method: "PATCH" });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || "操作失敗");
-      setMessage("訂單已標記為已完成");
+      const res = await fetch(`/api/orders/${orderId}/complete`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.detail || "確認失敗");
       router.refresh();
     } catch (err) {
-      setError(err.message || "操作失敗");
+      alert(err.message || "確認失敗");
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
   }
 
   return (
-    <div className="mt-4">
-      {error && (
-        <div className="mb-3 rounded-md bg-[var(--error-bg)] px-3 py-2 text-sm font-medium text-[var(--error-fg)]">
-          {error}
-        </div>
-      )}
-      {message && (
-        <div className="mb-3 rounded-md bg-[var(--success-bg)] px-3 py-2 text-sm font-medium text-[var(--success-fg)]">
-          {message}
-        </div>
-      )}
-      <button
-        onClick={completeOrder}
-        disabled={saving}
-        className="min-h-11 w-full rounded-md bg-[var(--teal-600)] px-6 text-sm font-bold text-white transition hover:bg-[var(--teal-700)] disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {saving ? "處理中..." : "已收到"}
-      </button>
-    </div>
+    <button
+      onClick={handleComplete}
+      disabled={loading}
+      className="rounded-md border border-[var(--success-fg)]/30 bg-[var(--success-bg)] px-3 py-2 text-sm font-bold text-[var(--success-fg)] transition hover:bg-[var(--success-fg)] hover:text-white disabled:opacity-50"
+    >
+      {loading ? "處理中..." : "確認收貨"}
+    </button>
   );
 }

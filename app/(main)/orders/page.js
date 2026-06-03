@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { COOKIE_NAME, ENDPOINTS, SERVICES, USE_LOCAL_MOCKS, apiFetch, jsonOrEmpty, serviceUrl } from "@/lib/api";
 import { MOCK_ORDERS } from "@/lib/mockData";
+import OrderCompleteButton from "@/components/OrderCompleteButton";
 
 const STATUS_META = {
   ordered: { label: "已下單", className: "bg-[var(--navy-50)] text-[var(--navy-600)]" },
@@ -29,7 +30,6 @@ async function getVendorMap() {
     return {};
   }
 }
-
 
 async function getOrders() {
   if (USE_LOCAL_MOCKS) return MOCK_ORDERS;
@@ -73,9 +73,6 @@ async function getOrders() {
 
     // 依 pickup_date 倒序
     unique.sort((a, b) => (b.pickup_date || "").localeCompare(a.pickup_date || ""));
-
-
-    console.log("🛒 後端回的訂單第一筆:", JSON.stringify(unique[0], null, 2));
 
     // 翻譯為前端格式
     // 先撈所有商家，建立 id → name 對照表
@@ -144,12 +141,12 @@ export default async function OrdersPage({ searchParams }) {
         <div className="mt-2 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-3xl font-black text-[var(--navy-900)]">歷史訂單</h1>
-            <p className="mt-2 text-sm text-slate-600">查看訂單與配送日期，進入明細可填寫原因取消。</p>
+            <p className="mt-2 text-sm text-slate-600">查看訂單與配送日期，進入明細可填寫原因取消。收到餐點後請按「確認收貨」。</p>
           </div>
           <form className="flex gap-2">
             <select name="status" defaultValue={status} className="min-h-10 rounded-md border border-[var(--line)] bg-white px-3 text-sm outline-none focus:border-[var(--teal-400)] focus:ring-2 focus:ring-[var(--teal-200)]/50">
               <option value="all">全部狀態</option>
-              <option value="ordered">已下單</option>
+              <option value="confirmed">已下單</option>
               <option value="ready">可領取</option>
               <option value="completed">已完成</option>
               <option value="cancelled">已取消</option>
@@ -191,7 +188,10 @@ export default async function OrdersPage({ searchParams }) {
                       <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${meta.className}`}>{meta.label}</span>
                     </td>
                     <td className="px-5 py-4 text-right">
-                      <Link href={`/orders/${order.id}`} className="rounded-md border border-[var(--navy-100)] px-3 py-2 text-sm font-bold text-[var(--navy-600)] hover:bg-[var(--navy-50)]">查看</Link>
+                      <div className="inline-flex gap-2">
+                        <OrderCompleteButton orderId={order.raw_id} status={order.status} />
+                        <Link href={`/orders/${order.id}`} className="rounded-md border border-[var(--navy-100)] px-3 py-2 text-sm font-bold text-[var(--navy-600)] hover:bg-[var(--navy-50)]">查看</Link>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -219,7 +219,10 @@ export default async function OrdersPage({ searchParams }) {
                   <span className="font-black text-[var(--navy-600)]">${total}</span>
                 </div>
                 <p className="mt-1 text-xs text-slate-400">{order.id}</p>
-                <Link href={`/orders/${order.id}`} className="mt-4 inline-flex w-full justify-center rounded-md bg-[var(--navy-600)] px-3 py-2 text-sm font-bold text-white">查看訂單</Link>
+                <div className="mt-4 flex gap-2">
+                  <OrderCompleteButton orderId={order.raw_id} status={order.status} />
+                  <Link href={`/orders/${order.id}`} className="flex-1 inline-flex justify-center rounded-md bg-[var(--navy-600)] px-3 py-2 text-sm font-bold text-white">查看訂單</Link>
+                </div>
               </article>
             );
           })}
