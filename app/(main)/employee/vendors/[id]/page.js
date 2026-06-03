@@ -127,6 +127,7 @@ export default async function VendorDetailPage({ params, searchParams }) {
       <section className="surface-panel overflow-hidden rounded-lg">
         <div className="aspect-[21/9] w-full overflow-hidden bg-gradient-to-br from-[var(--navy-50)] via-white to-[var(--teal-50)]">
           {vendor.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img src={vendor.image_url} alt={vendor.name} className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full items-center justify-center">

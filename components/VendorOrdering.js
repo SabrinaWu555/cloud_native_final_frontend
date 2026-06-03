@@ -8,7 +8,13 @@ import { getNextDays } from "@/lib/dates";
 
 export default function VendorOrdering({ vendor, menus, zone }) {
   const router = useRouter();
-  const [days, setDays] = useState(() => getNextDays(7));
+
+  // 只在 client hydration 後設為 true，讓 days 以 client 本地時間重算
+  const [isClient, setIsClient] = useState(false);
+  useEffect(() => { setIsClient(true); }, []);
+
+  // SSR 用 server 時間；hydration 後 isClient=true，以 client 時間重算（解決時區偏差）
+  const days = useMemo(() => getNextDays(7), [isClient]);
 
   // 初始預設選「第一個非 disabled 的日期」
   const [dates, setDates] = useState(() => {
@@ -16,27 +22,24 @@ export default function VendorOrdering({ vendor, menus, zone }) {
     return firstAvailable ? [firstAvailable.value] : [];
   });
 
-  // SSR 用 server 時間，hydration 後以 client 本地時間重算，並移除已截止的已選日期
-  useEffect(() => {
-    const clientDays = getNextDays(7);
-    setDays(clientDays);
-    const validSet = new Set(clientDays.filter((d) => !d.disabled).map((d) => d.value));
-    setDates((prev) => {
-      const cleaned = prev.filter((d) => validSet.has(d));
-      if (cleaned.length > 0) return cleaned;
-      const first = clientDays.find((d) => !d.disabled);
-      return first ? [first.value] : [];
-    });
-  }, []);
+  // 衍生：過濾掉因 client 重算後變成 disabled 的日期，不需要寫入 state
+  const effectiveDates = useMemo(() => {
+    const disabledSet = new Set(days.filter((d) => d.disabled).map((d) => d.value));
+    const filtered = dates.filter((d) => !disabledSet.has(d));
+    if (filtered.length > 0) return filtered;
+    const first = days.find((d) => !d.disabled);
+    return first ? [first.value] : [];
+  }, [dates, days]);
+
   const [cart, setCart] = useState({});
   const [stockMap, setStockMap] = useState({});
   // 當日期切換時，重撈該日期的庫存
   useEffect(() => {
-    if (dates.length === 0) {
+    if (effectiveDates.length === 0) {
       return;
     }
     // 只查第一個選中的日期（簡化）
-    const firstDate = dates[0];
+    const firstDate = effectiveDates[0];
     const menuIds = menus.map((m) => m.id);
     fetch("/api/inventory", {
       method: "POST",
@@ -46,7 +49,7 @@ export default function VendorOrdering({ vendor, menus, zone }) {
       .then((r) => (r.ok ? r.json() : { inventory: {} }))
       .then((data) => setStockMap(data.inventory || {}))
       .catch(() => setStockMap({}));
-  }, [dates, menus]);
+  }, [effectiveDates, menus]);
 
   const [status, setStatus] = useState("idle");
   const [message, setMessage] = useState("");
@@ -59,7 +62,7 @@ export default function VendorOrdering({ vendor, menus, zone }) {
 
   const remainingOf = (menu) => {
     // 先看即時庫存（後端 daily_inventory），沒有再 fallback dailyLimit
-    const stock = dates.length === 0 ? undefined : stockMap[menu.id];
+    const stock = effectiveDates.length === 0 ? undefined : stockMap[menu.id];
     if (stock !== null && stock !== undefined) return Number(stock);
     return Number(menu?.daily_limit ?? menu?.remaining ?? 0);
   };
@@ -67,14 +70,14 @@ export default function VendorOrdering({ vendor, menus, zone }) {
   const hasAnyStock = (menu) => remainingOf(menu) > 0;
 
   function addToCart(menuId) {
-    if (dates.length === 0) {
+    if (effectiveDates.length === 0) {
       setMessage("請先選擇至少一個取餐日期");
       return;
     }
     setMessage("");
     setCart((c) => {
       const next = { ...c };
-      for (const date of dates) {
+      for (const date of effectiveDates) {
         const key = `${menuId}_${date}`;
         if (!next[key]) next[key] = { menuId, date, qty: 1 };
       }
@@ -185,7 +188,7 @@ export default function VendorOrdering({ vendor, menus, zone }) {
 
   return (
     <>
-      <DateSelector days={days} selected={dates} onChange={setDates} />
+      <DateSelector days={days} selected={effectiveDates} onChange={setDates} />
 
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -253,10 +256,10 @@ export default function VendorOrdering({ vendor, menus, zone }) {
                   <button
                     type="button"
                     onClick={() => addToCart(menu.id)}
-                    disabled={soldOut || dates.length === 0}
+                    disabled={soldOut || effectiveDates.length === 0}
                     className="mt-3 w-full rounded-md bg-[var(--navy-600)] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--navy-800)] disabled:cursor-not-allowed disabled:bg-slate-300"
                   >
-                    {soldOut ? "已售完" : `加入購物車（已選 ${dates.length} 天）`}
+                    {soldOut ? "已售完" : `加入購物車（已選 ${effectiveDates.length} 天）`}
                   </button>
                 </div>
               </article>
@@ -300,7 +303,7 @@ export default function VendorOrdering({ vendor, menus, zone }) {
               </ul>
             ) : (
               <p className="mt-4 rounded-md bg-[var(--surface-muted)] p-4 text-center text-sm text-slate-500">
-                {dates.length === 0 ? "請先選擇日期" : "先選擇日期後加入餐點"}
+                {effectiveDates.length === 0 ? "請先選擇日期" : "先選擇日期後加入餐點"}
               </p>
             )}
 

@@ -114,16 +114,16 @@ export default function VendorNavbar() {
               title="個人資料"
             >
               {vendor?.imageUrl ? (
-                <img 
-                  src={vendor.imageUrl} 
+                <>{/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={vendor.imageUrl}
                   alt={`${displayName} 的頭像`}
                   className="h-full w-full object-cover"
                   onError={(e) => {
-                    // 如果圖片加載失敗（例如網址失效），自動隱藏圖片並顯示字母
                     e.target.style.display = 'none';
                     e.target.nextSibling.style.display = 'block';
                   }}
-                />
+                /></>
               ) : null}
               {/* Fallback 字母：當沒有 imageUrl 或是圖片加載失敗時顯示 */}
               <span style={{ display: vendor?.imageUrl ? 'none' : 'block' }}>

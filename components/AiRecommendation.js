@@ -51,11 +51,12 @@ export default function AiRecommendation({ zone }) {
               {/* 圖片 */}
               <div className="aspect-[5/4] w-full overflow-hidden rounded-md bg-gradient-to-br from-[var(--navy-50)] to-[var(--teal-50)]">
                 {item.image_url ? (
+                  <>{/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={item.image_url}
                     alt={item.name}
                     className="h-full w-full object-cover transition group-hover:scale-105"
-                  />
+                  /></>
                 ) : (
                   {/*<div className="flex h-full items-center justify-center text-2xl">🍽️</div>*/}
                 )}

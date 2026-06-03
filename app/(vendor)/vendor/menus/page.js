@@ -192,11 +192,12 @@ function MenuCard({ menu, weeklyAvail = [], todaySoldOut = false, disabled = fal
       {/* 區塊 1：左側餐點圖片 */}
       <div className="relative h-24 w-full shrink-0 sm:h-28 sm:w-28">
         {menu.imageUrl ? (
+          <>{/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={menu.imageUrl}
             alt={menu.name}
             className="h-full w-full rounded-md object-cover"
-          />
+          /></>
         ) : (
           <div className="flex h-full w-full items-center justify-center rounded-md bg-slate-100 text-xs text-slate-400">
             無圖片

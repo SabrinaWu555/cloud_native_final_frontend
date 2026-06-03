@@ -215,7 +215,8 @@ export default function NewMenuPage() {
               {/* 預覽 */}
               <div className="relative flex h-20 w-20 shrink-0 overflow-hidden rounded-md border border-[var(--line)] bg-slate-50">
                 {imagePreview ? (
-                  <img src={imagePreview} alt="預覽" className="h-full w-full object-cover" />
+                  <>{/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={imagePreview} alt="預覽" className="h-full w-full object-cover" /></>
                 ) : (
                   <span className="m-auto text-xs text-slate-400">無照片</span>
                 )}

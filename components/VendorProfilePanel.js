@@ -191,7 +191,8 @@ function ImageUploadSection({ imageUrl, vendorBase, onUploaded, onSaved }) {
     <div className="mt-5 flex items-center gap-5">
       <div className="relative flex h-20 w-20 shrink-0 overflow-hidden rounded-full border-2 border-[var(--line)] bg-slate-100">
         {preview ? (
-          <img src={preview} alt="商家圖片" className="h-full w-full object-cover" />
+          <>{/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={preview} alt="商家圖片" className="h-full w-full object-cover" /></>
         ) : (
           <span className="m-auto text-xs text-slate-400">無圖片</span>
         )}
