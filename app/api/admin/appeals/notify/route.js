@@ -89,6 +89,7 @@ export async function POST(request) {
 
   // === 通知商家（用 vendorId 查 userId）===
   const vendorUserId = await getVendorUserId(vendorId, token);
+  console.log("商家用戶 ID:", vendorUserId);
   if (vendorUserId) {
     if (action === "approve") {
       results.vendorNotified = await sendNotification({

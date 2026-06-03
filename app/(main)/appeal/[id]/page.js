@@ -151,7 +151,7 @@ export default async function AppealDetailPage({ params }) {
           <dl className="mt-4 grid gap-3 text-sm">
             <Row label="申訴類型" value={REASON_LABELS[appeal.reason] || appeal.reason} />
             <Row label="關聯訂單" value={appeal.order_id} link={appeal.order_id ? `/orders/${appeal.order_id}` : null} />
-            <Row label="申訴人" value={appeal.employee_name} />
+            {/* <Row label="申訴人" value={appeal.employee_name} /> */}
             <Row label="目前狀態" value={statusLabel(appeal.status)} />
           </dl>
         </div>
