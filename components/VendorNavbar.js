@@ -71,9 +71,13 @@ export default function VendorNavbar() {
               <p className="text-sm font-bold leading-tight">{displayName}</p>
               <p className="text-xs text-[var(--vendor-gray-100)]">vendor</p>
             </div>
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--vendor-gray-400)] font-black text-white">
+            <Link
+              href="/vendor/profile"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--vendor-gray-400)] font-black text-white transition hover:brightness-110"
+              title="個人資料"
+            >
               {avatarChar}
-            </div>
+            </Link>
             <button
               onClick={logout}
               className="rounded-md border border-white/20 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/10"

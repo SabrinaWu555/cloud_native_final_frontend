@@ -113,6 +113,30 @@ async function getOrders(rangeParam, fromParam, toParam) {
   }
 }
 
+function buildPrepSummary(orders) {
+  const today = new Date();
+  const tzOffset = today.getTimezoneOffset() * 60000;
+  const localToday = new Date(today.getTime() - tzOffset).toISOString().split("T")[0];
+
+  const map = {};
+  for (const o of orders) {
+    if (o.status === "cancelled") continue;
+    const date = o.pickup_date;
+    if (!date || date < localToday) continue;
+    if (!map[date]) map[date] = {};
+    map[date][o.menu_name] = (map[date][o.menu_name] ?? 0) + o.quantity;
+  }
+
+  return Object.entries(map)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, items]) => ({
+      date,
+      items: Object.entries(items)
+        .sort(([, a], [, b]) => b - a)
+        .map(([name, qty]) => ({ name, qty })),
+    }));
+}
+
 function statusMeta(status) {
   return STATUS_META[status] ?? { label: status ?? "未知", className: "bg-slate-100 text-slate-600" };
 }
@@ -133,7 +157,8 @@ export default async function VendorOrdersPage({ searchParams }) {
 
   const orders   = await getOrders(range, fromParam, toParam);
   console.log("Fetched orders:", orders);
-  const filtered = status === "all" ? orders : orders.filter((o) => o.status === status);
+  const filtered    = status === "all" ? orders : orders.filter((o) => o.status === status);
+  const prepSummary = buildPrepSummary(orders);
 
   const counts = {
     all:       orders.length,
@@ -195,6 +220,33 @@ export default async function VendorOrdersPage({ searchParams }) {
           </div>
         ))}
       </section>
+
+      {/* 本週備餐總覽 */}
+      {prepSummary.length > 0 && (
+        <section className="surface-panel rounded-lg p-5">
+          <h2 className="mb-4 text-lg font-black text-[var(--navy-900)]">備餐總覽</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+            {prepSummary.map(({ date, items }) => {
+              const total = items.reduce((s, i) => s + i.qty, 0);
+              return (
+                <div key={date} className="rounded-md border border-[var(--line)] bg-slate-50 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-sm font-black text-[var(--navy-900)]">{date}</p>
+                  </div>
+                  <ul className="space-y-1">
+                    {items.map(({ name, qty }) => (
+                      <li key={name} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="truncate text-slate-600">{name}</span>
+                        <span className="shrink-0 font-bold text-[var(--teal-600)]">{qty}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* 訂單列表 */}
       <section className="surface-panel overflow-hidden rounded-lg">

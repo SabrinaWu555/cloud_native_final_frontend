@@ -169,10 +169,34 @@ async function getMenus() {
   }
 }
 
+function buildPrepSummary(orders) {
+  const today = new Date();
+  const tzOffset = today.getTimezoneOffset() * 60000;
+  const localToday = new Date(today.getTime() - tzOffset).toISOString().split("T")[0];
+
+  const map = {};
+  for (const o of orders) {
+    if (o.status === "cancelled") continue;
+    const date = o.pickup_date;
+    if (!date || date < localToday) continue;
+    if (!map[date]) map[date] = {};
+    map[date][o.menu_name] = (map[date][o.menu_name] ?? 0) + o.quantity;
+  }
+
+  return Object.entries(map)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, items]) => ({
+      date,
+      items: Object.entries(items).map(([name, qty]) => ({ name, qty })),
+    }));
+}
+
 export default async function VendorPage() {
   const [orders, menus, revenue] = await Promise.all([getOrders("upcoming"), getMenus(), getBillingRevenue()]);
   const activeOrders = orders.filter((order) => !["completed", "cancelled"].includes(order.status));
   const availableMenus = menus.filter((menu) => Number(menu.effectiveDailyLimit ?? 0) > 0 && menu.isActive);
+  const prepSummary = buildPrepSummary(orders);
+  const previewDays = prepSummary.slice(0, 3);
 
   return (
     <div className="w-full space-y-6">
@@ -201,6 +225,38 @@ export default async function VendorPage() {
         <Stat label="待處理訂單" value={activeOrders.length} tone="navy" href="/vendor/orders" />
         <Stat label="供應中餐點" value={availableMenus.length} tone="teal" href="/vendor/menus" />
         <Stat label="本月總營收" value={`$${revenue}`} tone="amber" />
+      </section>
+
+      {/* 備餐準備 */}
+      <section className="surface-panel rounded-lg p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-slate-500">備餐準備</p>
+            <h2 className="mt-1 text-2xl font-black text-[var(--navy-900)]">近三天備料總覽</h2>
+          </div>
+          <Link href="/vendor/orders" className="text-xs font-semibold text-[var(--teal-600)] hover:underline">
+            查看整週 →
+          </Link>
+        </div>
+        {previewDays.length === 0 ? (
+          <p className="text-sm text-slate-400">近期無待備餐訂單</p>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-3">
+            {previewDays.map(({ date, items }) => (
+              <div key={date} className="rounded-md border border-[var(--line)] bg-slate-50 p-4">
+                <p className="mb-3 text-sm font-black text-[var(--navy-900)]">{date}</p>
+                <ul className="space-y-1.5">
+                  {items.map(({ name, qty }) => (
+                    <li key={name} className="flex items-center justify-between text-sm">
+                      <span className="truncate text-slate-700">{name}</span>
+                      <span className="ml-3 shrink-0 font-black text-[var(--teal-600)]">{qty} 份</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">

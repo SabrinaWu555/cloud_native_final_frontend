@@ -15,13 +15,13 @@ const STATUS_LABELS = {
   cancelled: "已取消/已拒單",
 };
 
-// 商家狀態推進面板設定
+// 商家狀態推進面板設定（預設接單，不需確認步驟）
 const STATUS_FLOW = {
-  pending: { next: "confirmed", label: "確認訂單", color: "bg-[var(--navy-600)] hover:bg-[var(--navy-800)]" },
-  ordered: { next: "confirmed", label: "確認訂單", color: "bg-[var(--navy-600)] hover:bg-[var(--navy-800)]" },
+  pending:   { next: "preparing", label: "開始備餐", color: "bg-[var(--navy-600)] hover:bg-[var(--navy-800)]" },
+  ordered:   { next: "preparing", label: "開始備餐", color: "bg-[var(--navy-600)] hover:bg-[var(--navy-800)]" },
   confirmed: { next: "preparing", label: "開始備餐", color: "bg-[var(--navy-600)] hover:bg-[var(--navy-800)]" },
   preparing: { next: "ready", label: "製作完成，通知員工領取", color: "bg-[var(--teal-400)] hover:bg-[var(--teal-600)]" },
-  ready: { next: "completed", label: "員工已取餐，確認核銷", color: "bg-green-600 hover:bg-green-700" },
+  ready:     { next: "completed", label: "員工已取餐，確認核銷", color: "bg-green-600 hover:bg-green-700" },
 };
 
 // 輔助函式：標準化並清洗後端資料結構
@@ -266,15 +266,7 @@ export default function VendorOrderDetailPage() {
             <div className="mt-6">
               {!isFinalStatus && currentFlow ? (
                 <div className="space-y-4">
-                  <p className="text-xs text-slate-500">請在完成當前階段工作後點擊下方按鈕：</p>
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={() => handleStatusChange(currentFlow.next)}
-                    className={`min-h-14 w-full rounded-md text-base font-bold text-white shadow-md transition transform active:scale-95 disabled:bg-slate-300 ${currentFlow.color}`}
-                  >
-                    {saving ? "正在變更訂單狀態..." : currentFlow.label}
-                  </button>
+                  <p className="text-xs text-slate-500">訂單預設已接單</p>
                 </div>
               ) : (
                 <div className="rounded-lg bg-slate-50 py-8 text-center border border-dashed border-slate-200">

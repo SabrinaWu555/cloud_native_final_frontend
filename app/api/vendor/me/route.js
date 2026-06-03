@@ -28,3 +28,25 @@ export async function GET() {
     return NextResponse.json({ error: "伺服器內部錯誤" }, { status: 500 });
   }
 }
+
+export async function PATCH(request) {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get(COOKIE_NAME)?.value;
+    if (!token) return NextResponse.json({ error: "未登入" }, { status: 401 });
+
+    const body = await request.json();
+    const url = serviceUrl(SERVICES.vendor, ENDPOINTS.vendorMe ?? "/api/v1/vendors/me");
+
+    const res = await apiFetch(url, { token, method: "PATCH", body });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      return NextResponse.json(data, { status: res.status });
+    }
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error("更新商家資料發生錯誤:", error);
+    return NextResponse.json({ error: "伺服器內部錯誤" }, { status: 500 });
+  }
+}
