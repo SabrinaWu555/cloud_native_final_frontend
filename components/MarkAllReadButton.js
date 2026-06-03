@@ -15,6 +15,7 @@ export default function MarkAllReadButton({ disabled }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ all: true }),
       });
+      window.dispatchEvent(new Event("notifications:updated"));
       router.refresh();
     } finally {
       setLoading(false);

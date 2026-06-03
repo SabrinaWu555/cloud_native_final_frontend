@@ -44,9 +44,12 @@ export default function Navbar() {
         .catch(() => {});
     };
     fetchUnread();
-    // 每 30 秒重新檢查一次
     const timer = setInterval(fetchUnread, 30000);
-    return () => clearInterval(timer);
+    window.addEventListener("notifications:updated", fetchUnread);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("notifications:updated", fetchUnread);
+    };
   }, []);
 
   async function logout() {
