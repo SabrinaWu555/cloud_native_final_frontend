@@ -30,7 +30,7 @@ function recentMonths() {
 
 export default function BillingDashboard({ statements, vendors }) {
   const router = useRouter();
-  const months = useMemo(recentMonths, []);
+  const months = useMemo(() => recentMonths(), []);
   const [periodFilter, setPeriodFilter] = useState("");
   const [showCreate, setShowCreate] = useState(false);
 
@@ -252,7 +252,7 @@ export default function BillingDashboard({ statements, vendors }) {
 
 function CreateStatementModal({ vendors, onClose }) {
   const router = useRouter();
-  const months = useMemo(recentMonths, []);
+  const months = useMemo(() => recentMonths(), []);
   const [vendorId, setVendorId] = useState(vendors[0]?.id || "");
   const [period, setPeriod] = useState(months[0]?.value || "");
   const [saving, setSaving] = useState(false);

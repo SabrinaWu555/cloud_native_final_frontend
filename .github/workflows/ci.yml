@@ -1,4 +1,3 @@
-# .github/workflows/ci.yml
 name: CI/CD Pipeline
 
 on:
@@ -8,9 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  # Job 1: 測試 + Build（PR 和 push 都會跑）
   build:
-    name: Build & Lint
+    name: Build, Lint & Test
     runs-on: ubuntu-latest
 
     steps:
@@ -20,14 +18,17 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
+          node-version: "22"
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
       - name: Run lint
-        run: npm run lint || true
+        run: npm run lint
+
+      - name: Run unit tests
+        run: npm test -- --runInBand
 
       - name: Build Next.js
         run: npm run build
@@ -39,9 +40,8 @@ jobs:
           APPEAL_URL: http://placeholder:8000/appeal-admin
           VENDOR_URL: http://placeholder:8000
           ORDER_URL: http://placeholder:8000
-          USE_LOCAL_MOCKS: 'false'
+          USE_LOCAL_MOCKS: "false"
 
-  # Job 2: 打包 Docker image 並推到 Docker Hub（只在 push main 時跑）
   docker:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
@@ -67,7 +67,6 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/cloud-native-frontend:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/cloud-native-frontend:${{ github.sha }}
 
-  # Job 3: SSH 到 EC2 部署新 image
   deploy:
     name: Deploy to EC2
     runs-on: ubuntu-latest
@@ -82,14 +81,11 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Pull 最新 image
             docker pull ${{ secrets.DOCKERHUB_USERNAME }}/cloud-native-frontend:latest
 
-            # 停掉舊的（如果有）
             docker stop frontend 2>/dev/null || true
             docker rm frontend 2>/dev/null || true
 
-            # 啟動新的
             docker run -d \
               --name frontend \
               --restart unless-stopped \
@@ -109,5 +105,4 @@ jobs:
               -e NODE_ENV=production \
               ${{ secrets.DOCKERHUB_USERNAME }}/cloud-native-frontend:latest
 
-            # 看狀態
             docker ps | grep frontend
