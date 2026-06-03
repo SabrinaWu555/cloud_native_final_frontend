@@ -71,13 +71,13 @@ export default function CommitteeNavbar() {
             })}
 
             {/* 員工視角入口：admin 也是員工，需要點餐 */}
-            <Link
+            {/* <Link
               href="/employee"
               className="ml-2 rounded-md border border-[var(--admin-coffee-400)] px-3 py-2 text-sm font-semibold text-[var(--admin-coffee-100)] transition hover:bg-[var(--admin-coffee-400)] hover:text-white"
               title="切換到員工點餐畫面（我也是員工，要訂便當）"
             >
               員工點餐 →
-            </Link>
+            </Link> */}
           </nav>
 
           <div className="flex items-center gap-2 border-l border-white/20 pl-3">
