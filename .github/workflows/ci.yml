@@ -1,5 +1,5 @@
 # .github/workflows/ci.yml
-name: CI
+name: CI/CD Pipeline
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
     branches: [main]
 
 jobs:
+  # Job 1: 測試 + Build（PR 和 push 都會跑）
   build:
     name: Build & Lint
     runs-on: ubuntu-latest
@@ -26,29 +27,87 @@ jobs:
         run: npm ci
 
       - name: Run lint
-        run: npm run lint || true   # lint 失敗暫時不擋（之後可以拿掉 || true）
+        run: npm run lint || true
 
       - name: Build Next.js
         run: npm run build
         env:
-          # build 階段給假值就好，反正只是檢查能不能 compile
           IAM_URL: http://placeholder:8000/iam
           NOTIFICATION_URL: http://placeholder:8000/notification
-          RECOMMENDATION_URL: http://placeholder:8000/notification
+          RECOMMENDATION_URL: http://placeholder:8000/recommendation
           BILLING_URL: http://placeholder:8000/billing
           APPEAL_URL: http://placeholder:8000/appeal-admin
           VENDOR_URL: http://placeholder:8000
           ORDER_URL: http://placeholder:8000
           USE_LOCAL_MOCKS: 'false'
 
+  # Job 2: 打包 Docker image 並推到 Docker Hub（只在 push main 時跑）
   docker:
-    name: Docker Build
+    name: Build & Push Docker Image
     runs-on: ubuntu-latest
     needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Build Docker image
-        run: docker build -t employee-frontend:${{ github.sha }} .
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/cloud-native-frontend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/cloud-native-frontend:${{ github.sha }}
+
+  # Job 3: SSH 到 EC2 部署新 image
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Pull 最新 image
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/cloud-native-frontend:latest
+
+            # 停掉舊的（如果有）
+            docker stop frontend 2>/dev/null || true
+            docker rm frontend 2>/dev/null || true
+
+            # 啟動新的
+            docker run -d \
+              --name frontend \
+              --restart unless-stopped \
+              -p 3000:3000 \
+              -e IAM_URL=http://32.236.51.177:8000/iam \
+              -e NOTIFICATION_URL=http://32.236.51.177:8000/notification \
+              -e RECOMMENDATION_URL=http://32.236.51.177:8000/recommendation \
+              -e BILLING_URL=http://32.236.51.177:8000/billing \
+              -e APPEAL_URL=http://32.236.51.177:8000/appeal-admin \
+              -e VENDOR_URL=http://32.236.51.177:8000 \
+              -e ORDER_URL=http://54.66.51.3:8081 \
+              -e AUTH_COOKIE_NAME=token \
+              -e AUTH_ROLE_COOKIE_NAME=role \
+              -e AUTH_COOKIE_MAX_AGE=28800 \
+              -e USE_LOCAL_MOCKS=false \
+              -e COOKIE_SECURE=false \
+              -e NODE_ENV=production \
+              ${{ secrets.DOCKERHUB_USERNAME }}/cloud-native-frontend:latest
+
+            # 看狀態
+            docker ps | grep frontend
