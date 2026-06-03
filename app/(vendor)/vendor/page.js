@@ -1,15 +1,16 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
-import { 
-  COOKIE_NAME, 
-  ENDPOINTS, 
-  SERVICES, 
+import {
+  COOKIE_NAME,
+  ENDPOINTS,
+  SERVICES,
   USE_LOCAL_MOCKS,
-  apiFetch, 
-  jsonOrEmpty, 
-  serviceUrl 
+  apiFetch,
+  jsonOrEmpty,
+  serviceUrl,
+  withPathParams,
 } from "@/lib/api";
-import { MOCK_MENUS, MOCK_ORDERS } from "@/lib/mockData";
+import { MOCK_MENUS, MOCK_ORDERS, MOCK_NOTIFICATIONS } from "@/lib/mockData";
 import { use } from "react";
 
 async function resolveVendorId(token) {
@@ -129,6 +130,24 @@ function calculateDates(rangeParam, fromParam, toParam) {
   return { from: "", to: "" };
 }
 
+async function getRecentNotifications() {
+  if (USE_LOCAL_MOCKS || !SERVICES.notification) return MOCK_NOTIFICATIONS.slice(0, 5);
+  const cookieStore = await cookies();
+  const token = cookieStore.get(COOKIE_NAME)?.value;
+  const userId = cookieStore.get("userId")?.value;
+  if (!token || !userId) return [];
+  try {
+    const path = withPathParams(ENDPOINTS.notificationsByUser, { id: userId });
+    const res = await apiFetch(serviceUrl(SERVICES.notification, path), { token });
+    if (!res.ok) return [];
+    const data = await jsonOrEmpty(res);
+    const list = Array.isArray(data) ? data : data.notifications || [];
+    return list.slice(0, 5);
+  } catch {
+    return [];
+  }
+}
+
 async function getBillingRevenue() {
   const token = (await cookies()).get(COOKIE_NAME)?.value;
   if (!token || !SERVICES.vendor || !SERVICES.billing) return 0;
@@ -192,7 +211,7 @@ function buildPrepSummary(orders) {
 }
 
 export default async function VendorPage() {
-  const [orders, menus, revenue] = await Promise.all([getOrders("upcoming"), getMenus(), getBillingRevenue()]);
+  const [orders, menus, revenue, recentNotifications] = await Promise.all([getOrders("upcoming"), getMenus(), getBillingRevenue(), getRecentNotifications()]);
   const activeOrders = orders.filter((order) => !["completed", "cancelled"].includes(order.status));
   const availableMenus = menus.filter((menu) => Number(menu.effectiveDailyLimit ?? 0) > 0 && menu.isActive);
   const prepSummary = buildPrepSummary(orders);
@@ -256,6 +275,54 @@ export default async function VendorPage() {
               </div>
             ))}
           </div>
+        )}
+      </section>
+
+      {/* 通知預覽 */}
+      <section className="surface-panel rounded-lg p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-slate-500">最新消息</p>
+            <h2 className="mt-1 text-2xl font-black text-[var(--navy-900)]">近期通知</h2>
+          </div>
+          <Link href="/vendor/notifications" className="text-xs font-semibold text-[var(--teal-600)] hover:underline">
+            查看全部 →
+          </Link>
+        </div>
+        {recentNotifications.length === 0 ? (
+          <p className="text-sm text-slate-400">目前沒有任何通知</p>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {recentNotifications.map((n) => {
+              const unread = !n.read_at && !n.is_read;
+              const isCancel = n.type === "cancel" || String(n.title).includes("取消");
+              return (
+                <li key={n.id}>
+                  <Link
+                    href={`/vendor/notifications/${n.id}`}
+                    className={`flex items-center gap-3 py-3 px-2 rounded-md transition ${unread ? "hover:bg-slate-100" : "hover:bg-slate-50"}`}
+                  >
+                    <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-bold ${
+                      isCancel
+                        ? "border-[var(--error-fg)] bg-[var(--error-bg)] text-[var(--error-fg)]"
+                        : "border-[var(--teal-400)] bg-[var(--teal-50)] text-[var(--teal-600)]"
+                    }`}>
+                      {isCancel ? "取消" : "建立"}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <span className="truncate text-sm font-bold text-[var(--navy-900)]">{n.title}</span>
+                        {unread && (
+                          <span className="shrink-0 rounded-full bg-[var(--error-fg)] px-1.5 py-0.5 text-[10px] font-black text-white">未讀</span>
+                        )}
+                      </span>
+                      <span className="line-clamp-1 text-xs text-slate-500">{n.message ?? n.content}</span>
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </section>
 

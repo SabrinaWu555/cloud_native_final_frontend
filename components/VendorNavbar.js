@@ -7,17 +7,24 @@ const NAV_ITEMS = [
   { href: "/vendor", label: "商家工作台" },
   { href: "/vendor/menus", label: "菜單總覽" },
   { href: "/vendor/orders", label: "訂單總覽" },
+  { href: "/vendor/notifications", label: "通知" },
 ];
 
 export default function VendorNavbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [vendor, setVendor] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     fetch("/api/vendor/me")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => data && setVendor(data))
+      .catch(() => {});
+
+    fetch("/api/notifications/unread")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => data && setUnreadCount(data.unread ?? 0))
       .catch(() => {});
   }, []);
 
@@ -50,17 +57,23 @@ export default function VendorNavbar() {
                 item.href === "/vendor"
                   ? pathname === "/vendor"
                   : pathname.startsWith(item.href);
+              const isNotifications = item.href === "/vendor/notifications";
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+                  className={`relative rounded-md px-3 py-2 text-sm font-semibold transition ${
                     active
                       ? "bg-[var(--vendor-gray-400)] text-white"
                       : "text-white/80 hover:bg-white/10 hover:text-white"
                   }`}
                 >
                   {item.label}
+                  {isNotifications && unreadCount > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
                 </Link>
               );
             })}
