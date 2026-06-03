@@ -14,14 +14,18 @@ export default function VendorManagementTable({ vendors }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [zoneFilter, setZoneFilter] = useState("");
-  const [suspendingFor, setSuspendingFor] = useState(null); // 要填停權原因的商家
-  const [zoneEditingFor, setZoneEditingFor] = useState(null); // 要編輯廠區的商家
+  const [statusFilter, setStatusFilter] = useState("ALL"); // ALL / ACTIVE / SUSPENDED
+  const [suspendingFor, setSuspendingFor] = useState(null);
+  const [zoneEditingFor, setZoneEditingFor] = useState(null);
   const [busyId, setBusyId] = useState(null);
 
   const filtered = useMemo(() => {
     return vendors.filter((v) => {
-      // 廠區篩選：v.factoryZones 是陣列
+      // 狀態篩選
+      if (statusFilter !== "ALL" && v.status !== statusFilter) return false;
+      // 廠區篩選
       if (zoneFilter && !(v.factoryZones || []).includes(zoneFilter)) return false;
+      // 文字搜尋
       if (query) {
         const kw = query.toLowerCase();
         if (
@@ -31,7 +35,7 @@ export default function VendorManagementTable({ vendors }) {
       }
       return true;
     });
-  }, [vendors, query, zoneFilter]);
+  }, [vendors, query, zoneFilter, statusFilter]);
 
   async function reactivate(vendor) {
     if (!window.confirm(`確定要恢復「${vendor.name}」的營運嗎？\n恢復後員工可再次訂購此商家的餐點。`)) return;
@@ -73,6 +77,15 @@ export default function VendorManagementTable({ vendors }) {
             <option key={z} value={z}>{z}</option>
           ))}
         </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="min-h-10 rounded-md border border-[var(--line)] bg-white px-3 text-sm outline-none focus:border-[var(--admin-coffee-400)]"
+        >
+          <option value="ALL">全部狀態</option>
+          <option value="ACTIVE">營運中</option>
+          <option value="SUSPENDED">已停權</option>
+        </select>
       </div>
 
       {/* 表格 */}
@@ -98,12 +111,22 @@ export default function VendorManagementTable({ vendors }) {
             ) : filtered.map((v) => {
               const meta = STATUS_META[v.status] || { label: v.status || "未知", className: "bg-slate-100 text-slate-600" };
               const isActive = v.status === "ACTIVE";
+              const isSuspended = v.status === "SUSPENDED";
               const zones = v.factoryZones || [];
               const violations = Number(v.violationPoints || 0);
               return (
-                <tr key={v.id} className="hover:bg-[var(--surface-muted)]">
+                <tr
+                  key={v.id}
+                  className={`transition ${
+                    isSuspended
+                      ? "bg-slate-50 opacity-60 hover:opacity-80"
+                      : "hover:bg-[var(--surface-muted)]"
+                  }`}
+                >
                   <td className="py-3 pr-3">
-                    <p className="font-bold text-slate-900">{v.name}</p>
+                    <p className={`font-bold ${isSuspended ? "text-slate-500 line-through" : "text-slate-900"}`}>
+                      {v.name}
+                    </p>
                     <p className="text-xs text-slate-400">{String(v.id).slice(0, 8)}...</p>
                   </td>
                   <td className="py-3 pr-3 text-slate-700">{v.category || "—"}</td>
@@ -138,6 +161,11 @@ export default function VendorManagementTable({ vendors }) {
                     <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${meta.className}`}>
                       {meta.label}
                     </span>
+                    {isSuspended && v.suspendReason && (
+                      <p className="mt-1 text-xs text-slate-400" title={v.suspendReason}>
+                        原因：{String(v.suspendReason).slice(0, 15)}{v.suspendReason.length > 15 ? "..." : ""}
+                      </p>
+                    )}
                   </td>
                   <td className="py-3 pr-3 text-right">
                     <div className="inline-flex gap-2">
@@ -177,20 +205,14 @@ export default function VendorManagementTable({ vendors }) {
         共 {filtered.length} 戶商家・違規點數會在福委會核准申訴退款時自動 +1
       </p>
 
-      {/* 停權彈窗（要填原因） */}
+      {/* 停權彈窗 */}
       {suspendingFor && (
-        <SuspendModal
-          vendor={suspendingFor}
-          onClose={() => setSuspendingFor(null)}
-        />
+        <SuspendModal vendor={suspendingFor} onClose={() => setSuspendingFor(null)} />
       )}
 
       {/* 修改廠區彈窗 */}
       {zoneEditingFor && (
-        <ZoneEditModal
-          vendor={zoneEditingFor}
-          onClose={() => setZoneEditingFor(null)}
-        />
+        <ZoneEditModal vendor={zoneEditingFor} onClose={() => setZoneEditingFor(null)} />
       )}
     </section>
   );

@@ -12,7 +12,8 @@ async function getVendors() {
   if (!SERVICES.vendor) return [];
   const token = (await cookies()).get(COOKIE_NAME)?.value;
   try {
-    const res = await apiFetch(serviceUrl(SERVICES.vendor, ENDPOINTS.vendors), { token });
+    // 改用 admin endpoint，會回所有商家（含 SUSPENDED）
+    const res = await apiFetch(`${SERVICES.vendor}/api/v1/admin/vendors`, { token });
     if (!res.ok) return [];
     const data = await jsonOrEmpty(res);
     return Array.isArray(data) ? data : data.vendors || [];
