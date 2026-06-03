@@ -29,7 +29,7 @@ export async function GET() {
   }
 }
 
-export async function PATCH(request) {
+export async function PUT(request) {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get(COOKIE_NAME)?.value;
@@ -38,7 +38,7 @@ export async function PATCH(request) {
     const body = await request.json();
     const url = serviceUrl(SERVICES.vendor, ENDPOINTS.vendorMe ?? "/api/v1/vendors/me");
 
-    const res = await apiFetch(url, { token, method: "PATCH", body });
+    const res = await apiFetch(url, { token, method: "PUT", body });
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
