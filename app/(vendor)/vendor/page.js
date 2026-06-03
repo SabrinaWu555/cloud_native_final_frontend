@@ -150,23 +150,26 @@ async function getRecentNotifications() {
 
 async function getBillingRevenue() {
   const token = (await cookies()).get(COOKIE_NAME)?.value;
-  if (!token || !SERVICES.vendor || !SERVICES.billing) return 0;
+  if (!token || !SERVICES.billing) return 0;
 
   try {
-    const meRes = await apiFetch(serviceUrl(SERVICES.vendor, ENDPOINTS.vendorMe), { token });
-    if (!meRes.ok) return 0;
-    const me = await meRes.json();
-    const vendorId = me.id;
-    if (!vendorId) return 0;
+    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString());
+    const userId = payload.userId ?? payload.id;
+    if (!userId) return 0;
 
-    const statementsRes = await apiFetch(
-      serviceUrl(SERVICES.billing, `/billing/billing/statements/user/${vendorId}`),
+    const res = await apiFetch(
+      serviceUrl(SERVICES.billing, withPathParams(ENDPOINTS.billingStatementsByUser, { id: userId })),
       { token },
     );
-    if (!statementsRes.ok) return 0;
-    const statements = await jsonOrEmpty(statementsRes);
-    const list = Array.isArray(statements) ? statements : [];
-    return list.reduce((sum, s) => sum + Number(s.total_amount ?? 0), 0);
+    if (!res.ok) return 0;
+    const data = await jsonOrEmpty(res);
+    const list = Array.isArray(data) ? data : [];
+
+    // 只加總當月帳單
+    const thisMonth = new Date().toISOString().slice(0, 7); // "2026-06"
+    return list
+      .filter((s) => s.statement_period === thisMonth)
+      .reduce((sum, s) => sum + Number(s.total_amount ?? 0), 0);
   } catch {
     return 0;
   }

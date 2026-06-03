@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: "/vendor/menus", label: "菜單總覽" },
   { href: "/vendor/orders", label: "訂單總覽" },
   { href: "/vendor/notifications", label: "通知" },
+  { href: "/vendor/billing", label: "當月收益" },
 ];
 
 export default function VendorNavbar() {
@@ -16,16 +17,31 @@ export default function VendorNavbar() {
   const [vendor, setVendor] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
 
+  function refreshUnread() {
+    fetch("/api/notifications/unread")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => data && setUnreadCount(data.unread ?? 0))
+      .catch(() => {});
+  }
+
+  // 初次 mount：抓商家資料 + 未讀數
   useEffect(() => {
     fetch("/api/vendor/me")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => data && setVendor(data))
       .catch(() => {});
+    refreshUnread();
+  }, []);
 
-    fetch("/api/notifications/unread")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => data && setUnreadCount(data.unread ?? 0))
-      .catch(() => {});
+  // pathname 變化時重抓（例如看完通知詳情返回列表）
+  useEffect(() => {
+    refreshUnread();
+  }, [pathname]);
+
+  // 監聽「全部已讀 / 單筆已讀」事件，立即更新
+  useEffect(() => {
+    window.addEventListener("notifications:updated", refreshUnread);
+    return () => window.removeEventListener("notifications:updated", refreshUnread);
   }, []);
 
   async function logout() {
