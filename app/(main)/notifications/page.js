@@ -9,10 +9,10 @@ import MarkAllReadButton from "@/components/MarkAllReadButton";
 
 export const dynamic = "force-dynamic";
 
-// 統一分類：兼容舊資料 (例如 pickup)，確保顯示樣式只有這兩種
 const TYPE_META = {
   create: { label: "訂單建立", className: "border-[var(--teal-400)] bg-[var(--teal-50)] text-[var(--teal-600)]" },
   cancel: { label: "訂單取消", className: "border-[var(--error-fg)] bg-[var(--error-bg)] text-[var(--error-fg)]" },
+  appeal: { label: "申訴通知", className: "border-[var(--navy-600)] bg-[var(--navy-50)] text-[var(--navy-600)]" },
 };
 
 async function getNotifications() {
@@ -36,20 +36,20 @@ function formatDateTime(value) {
   return new Intl.DateTimeFormat("zh-TW", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 }
 
-// 輔助函式：確保每一筆通知都能被正確分類為 create 或 cancel
 function getNotificationCategory(item) {
-  const isCancel = item.type === "cancel" || String(item.title).includes("取消");
-  return isCancel ? "cancel" : "create"; // 只要不是取消，就歸類為建立
+  if (item.type === "appeal" || String(item.title).includes("申訴")) return "appeal";
+  if (item.type === "cancel" || String(item.title).includes("取消")) return "cancel";
+  return "create";
 }
 
 export default async function NotificationsPage() {
   const items = await getNotifications();
   const isUnread = (n) => !n.read_at && !n.is_read;
   
-  // 計算總數
   const unreadCount = items.filter(isUnread).length;
   const cancelCount = items.filter((i) => getNotificationCategory(i) === "cancel").length;
   const createCount = items.filter((i) => getNotificationCategory(i) === "create").length;
+  const appealCount = items.filter((i) => getNotificationCategory(i) === "appeal").length;
 
   return (
     <div className="mx-auto w-full max-w-[1440px] space-y-6">
@@ -64,11 +64,11 @@ export default async function NotificationsPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
-        {/* 未讀通知：顏色改回原版的 var(--navy) 變數 */}
+      <section className="grid gap-4 md:grid-cols-4">
         <Stat label="未讀通知" value={unreadCount} tone="blue" />
         <Stat label="訂單已建立" value={createCount} tone="green" />
         <Stat label="訂單已取消" value={cancelCount} tone="red" />
+        <Stat label="申訴通知" value={appealCount} tone="navy" />
       </section>
 
       <section className="surface-panel overflow-hidden rounded-lg shadow-sm border border-slate-100">
@@ -138,7 +138,9 @@ function Stat({ label, value, tone }) {
       ? "border-[var(--teal-400)] bg-[var(--teal-50)] text-[var(--teal-600)]"
       : tone === "red"
         ? "border-[var(--error-fg)] bg-[var(--error-bg)] text-[var(--error-fg)]"
-        : "border-[var(--navy-600)] bg-[var(--navy-50)] text-[var(--navy-600)]";
+        : tone === "navy"
+          ? "border-[var(--navy-400)] bg-[var(--navy-50)] text-[var(--navy-700)]"
+          : "border-[var(--navy-600)] bg-[var(--navy-50)] text-[var(--navy-600)]";
         
   return (
     <div className={`border-l-4 p-5 ${className}`}>

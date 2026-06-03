@@ -69,31 +69,25 @@ export default async function VendorBillingPage() {
 
       {/* 帳單模組 */}
       <section className="surface-panel rounded-lg p-5">
-        <h2 className="mb-4 text-lg font-black text-[var(--navy-900)]">歷史對帳單</h2>
-        
+        <h2 className="mb-4 text-lg font-black text-[var(--navy-900)]">每月收益對帳單</h2>
+
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
             <thead className="bg-[var(--navy-50)] text-xs font-bold uppercase text-slate-500">
               <tr>
                 <th className="px-5 py-3">帳單編號</th>
-                <th className="px-5 py-3">結算區間</th>
-                <th className="px-5 py-3">總餐點份數</th>
-                <th className="px-5 py-3">結算總金額</th>
-                <th className="px-5 py-3">付款狀態</th>
+                <th className="px-5 py-3">結算月份</th>
+                <th className="px-5 py-3">月收益</th>
+                <th className="px-5 py-3">最後同步時間</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {statements.map((s) => (
                 <tr key={s.id} className="hover:bg-[var(--surface-muted)]">
                   <td className="px-5 py-4 font-semibold text-[var(--navy-900)]">#STMT-{s.id}</td>
-                  <td className="px-5 py-4 text-slate-600">{s.period || "2024-01"}</td>
-                  <td className="px-5 py-4 text-slate-600">{s.total_quantity ?? 0} 份</td>
+                  <td className="px-5 py-4 text-slate-600">{s.statement_period || "—"}</td>
                   <td className="px-5 py-4 font-bold text-[var(--navy-600)]">${Number(s.total_amount ?? 0).toLocaleString()}</td>
-                  <td className="px-5 py-4">
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${s.status === 'paid' ? 'bg-[var(--teal-50)] text-[var(--teal-600)]' : 'bg-yellow-50 text-yellow-600'}`}>
-                      {s.status === 'paid' ? '已撥款' : '處理中'}
-                    </span>
-                  </td>
+                  <td className="px-5 py-4 text-slate-500 text-xs">{s.synced_at ? new Date(s.synced_at).toLocaleString("zh-TW") : "—"}</td>
                 </tr>
               ))}
             </tbody>

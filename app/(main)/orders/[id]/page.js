@@ -7,6 +7,7 @@ import {
 } from "@/lib/api";
 import { getMockOrder } from "@/lib/mockData";
 import OrderCancelPanel from "@/components/OrderCancelPanel";
+import OrderCompleteButton from "@/components/OrderCompleteButton";
 
 const STATUS_LABELS = {
   pending: "待確認",
@@ -144,13 +145,16 @@ export default async function OrderDetailPage({ params }) {
           </div>
         </div>
 
-        {/* 右：取消面板 */}
-        <OrderCancelPanel
-          orderId={order.raw_id}
-          status={order.status}
-          targetDate={order.target_date}
-          initialReason={order.cancel_reason || ""}
-        />
+        {/* 右：操作面板 */}
+        <div className="space-y-4">
+          <OrderCompleteButton orderId={order.raw_id} status={order.status} />
+          <OrderCancelPanel
+            orderId={order.raw_id}
+            status={order.status}
+            targetDate={order.target_date}
+            initialReason={order.cancel_reason || ""}
+          />
+        </div>
       </section>
     </div>
   );

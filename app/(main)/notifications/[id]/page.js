@@ -8,8 +8,7 @@ import { getMockNotification, markMockNotificationRead } from "@/lib/mockData";
 
 export const dynamic = "force-dynamic";
 
-// [修改點]：同步修改為只有這兩種
-const TYPE_LABELS = { create: "訂單建立", cancel: "訂單取消" };
+const TYPE_LABELS = { create: "訂單建立", cancel: "訂單取消", appeal: "申訴通知" };
 
 async function loadAndRead(id) {
   if (USE_LOCAL_MOCKS || !SERVICES.notification) {
@@ -63,11 +62,12 @@ export default async function NotificationDetailPage({ params }) {
     );
   }
 
-  // 依照 type 決定標籤顏色
-  const isCancel = item.type === "cancel";
-  const tagColors = isCancel 
-    ? "bg-[var(--error-bg)] text-[var(--error-fg)]" 
-    : "bg-[var(--teal-50)] text-[var(--teal-600)]";
+  const tagColors =
+    item.type === "cancel"
+      ? "bg-[var(--error-bg)] text-[var(--error-fg)]"
+      : item.type === "appeal"
+        ? "bg-[var(--navy-50)] text-[var(--navy-700)]"
+        : "bg-[var(--teal-50)] text-[var(--teal-600)]";
 
   return (
     <div className="mx-auto w-full max-w-[820px] space-y-5">

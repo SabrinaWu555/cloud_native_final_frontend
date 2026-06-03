@@ -243,7 +243,7 @@ export default async function VendorPage() {
       <section className="grid gap-4 md:grid-cols-3">
         <Stat label="待處理訂單" value={activeOrders.length} tone="navy" href="/vendor/orders" />
         <Stat label="供應中餐點" value={availableMenus.length} tone="teal" href="/vendor/menus" />
-        <Stat label="本月總營收" value={`$${revenue}`} tone="amber" />
+        <Stat label="本月總營收" value={`$${revenue}`} tone="amber" href="/vendor/billing" />
       </section>
 
       {/* 備餐準備 */}
